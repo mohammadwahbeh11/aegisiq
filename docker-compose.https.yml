@@ -1,0 +1,29 @@
+# docker-compose.https.yml — TLS overlay for the backend.
+#
+#   1. Generate a cert once:   ./scripts/generate_certs.sh
+#   2. Bring the stack up with the overlay:
+#        docker compose -f docker-compose.yml -f docker-compose.https.yml up --build
+#
+# The backend then serves HTTPS on 8443. Mixed-content note: an http://
+# frontend CAN call an https:// backend, so the default console at
+# http://localhost:5173 keeps working. To also serve the console over TLS,
+# terminate it behind a TLS reverse proxy (caddy/nginx) or run Vite with
+# --https; then set VITE_API_URL=https://localhost:8443 (streamUrl() upgrades
+# ws:// to wss:// automatically).
+services:
+  backend:
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./certs:/app/certs:ro
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8443"
+      - --ssl-keyfile
+      - /app/certs/aegis.key
+      - --ssl-certfile
+      - /app/certs/aegis.crt

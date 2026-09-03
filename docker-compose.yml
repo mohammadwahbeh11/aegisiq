@@ -1,0 +1,139 @@
+# Lightweight SIEM & SOAR -- one-command bring-up.
+#
+#   docker compose up --build
+#
+# Backend  -> http://localhost:8000  (FastAPI, docs at /docs)
+# Frontend -> http://localhost:5173  (React console)
+#
+# Nothing here is required to develop -- see README.md for the plain
+# host-run flow (a python venv + `npm run dev`). Compose is here for a
+# reproducible whole-stack demo.
+
+services:
+  backend:
+    build: ./backend
+    container_name: siem-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # Bind-mount the backend source so live edits take effect after a
+      # restart, and share the SQLite file with the host (persists
+      # across container recreation).
+      - ./backend:/app
+      - ./data:/app/data
+    environment:
+      # Absolute path inside the container. The default in app/config.py
+      # resolves to <repo>/data/siem.db RELATIVE TO THE SOURCE TREE,
+      # which becomes /app/data/siem.db under this bind mount -- and
+      # matches the ./data volume above so the file survives restarts.
+      DATABASE_URL: "sqlite:////app/data/siem.db"
+      # Change SECRET_KEY for anything beyond the local demo (see .env
+      # for the generation command).
+      SECRET_KEY: "${SECRET_KEY:-dev-secret-key-change-me}"
+      DEFAULT_ADMIN_USERNAME: "${DEFAULT_ADMIN_USERNAME:-admin}"
+      DEFAULT_ADMIN_PASSWORD: "${DEFAULT_ADMIN_PASSWORD:-ChangeMe123!}"
+      CORS_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173"
+      SOAR_ENABLED: "true"
+      SOAR_EXECUTE: "false"
+    restart: unless-stopped
+    # --reload picks up code changes on the mounted source.
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # The bundled console will call the backend at this URL from the
+        # browser. Change to http://<host-ip>:8000 if you open the
+        # console from another machine on the lab network.
+        VITE_API_URL: "http://localhost:8000"
+    container_name: siem-frontend
+    ports:
+      # nginx serves the built bundle on 80 inside the container; the
+      # host still uses 5173 to match the dev experience.
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # ── PostgreSQL — the scale-up profile ────────────────────────────────
+  # SQLite is fine for the demo; for sustained ingest use Postgres. Start
+  # the stack with the "postgres" profile and point the backend at it:
+  #
+  #   docker compose --profile postgres up --build
+  #   # then set on the backend service:
+  #   #   DATABASE_URL=postgresql+psycopg://siem:siem@postgres:5432/siem
+  #
+  # No application code changes — SQLAlchemy handles the dialect. Add
+  # `psycopg[binary]` to backend/requirements.txt when you enable this.
+  # See docs/GAP_ANALYSIS.md for when to move, and why petabyte-scale
+  # ingest wants ClickHouse/OpenSearch instead.
+  postgres:
+    image: postgres:16-alpine
+    container_name: siem-postgres
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-siem}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-siem}"
+      POSTGRES_DB: "${POSTGRES_DB:-siem}"
+    ports:
+      - "5432:5432"
+    volumes:
+      - siem-pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-siem}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── OpenSearch — the event-store profile (LOG_STORE=opensearch) ───────
+  #   docker compose --profile opensearch up -d
+  #   # then on the backend: LOG_STORE=opensearch,
+  #   #   OPENSEARCH_URL=https://opensearch:9200 (admin/admin)
+  #   # and: pip install opensearch-py
+  # Single-node, security demo config — fine for a lab, NOT for production
+  # (set a real admin password + TLS certs before any network exposure).
+  opensearch:
+    image: opensearchproject/opensearch:2.13.0
+    container_name: siem-opensearch
+    profiles: ["opensearch"]
+    environment:
+      discovery.type: single-node
+      bootstrap.memory_lock: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "${OPENSEARCH_PASSWORD:-Aegis!OpenSearch1}"
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile: { soft: 65536, hard: 65536 }
+    ports:
+      - "9200:9200"
+    volumes:
+      - siem-osdata:/usr/share/opensearch/data
+    restart: unless-stopped
+
+  # ── ClickHouse — the event-store profile (LOG_STORE=clickhouse) ───────
+  #   docker compose --profile clickhouse up -d
+  #   # then on the backend: LOG_STORE=clickhouse, CLICKHOUSE_HOST=clickhouse
+  #   # and: pip install clickhouse-connect
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: siem-clickhouse
+    profiles: ["clickhouse"]
+    environment:
+      CLICKHOUSE_USER: "${CLICKHOUSE_USERNAME:-default}"
+      CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD:-}"
+      CLICKHOUSE_DB: "${CLICKHOUSE_DATABASE:-aegisiq}"
+    ports:
+      - "8123:8123"   # HTTP interface (clickhouse-connect)
+      - "9000:9000"   # native protocol
+    volumes:
+      - siem-chdata:/var/lib/clickhouse
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    restart: unless-stopped
+
+volumes:
+  siem-pgdata:
+  siem-osdata:
+  siem-chdata:

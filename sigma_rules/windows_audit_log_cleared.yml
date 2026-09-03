@@ -1,0 +1,20 @@
+title: Windows Security Audit Log Cleared
+id: aegisiq-win-1102
+status: stable
+description: >
+  The Windows Security audit log was cleared (Event ID 1102). Adversaries
+  clear logs to destroy evidence after an intrusion. On a healthy host
+  this is rare and deliberate.
+references:
+  - https://attack.mitre.org/techniques/T1070/001/
+tags:
+  - attack.defense_evasion
+  - attack.t1070.001
+logsource:
+  product: windows
+  service: security
+detection:
+  selection:
+    EventID: 1102
+  condition: selection
+level: critical

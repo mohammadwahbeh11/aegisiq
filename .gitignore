@@ -1,0 +1,56 @@
+# ── Environment / secrets ────────────────────────────────────────────
+.env
+frontend/.env
+*.env.local
+# Never commit real key material
+*.pem
+*.key
+
+# ── Python ───────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+backend/.venv/
+.venv/
+venv/
+
+# ── Databases (dev + leftovers) ──────────────────────────────────────
+# The SQLite dev DB and any of its WAL/SHM sidecars or timestamped
+# backups must never be committed — they hold local demo data + secrets.
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+backend/data/*.db
+backend/siem.db*
+*.stale_*
+*.bak
+
+# ── Node / frontend build ────────────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+node_modules/
+dist/
+
+# ── Analysis / uploads scratch ───────────────────────────────────────
+backend/uploads/
+/tmp/
+
+# ── OS / editor ──────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# TLS certificates (generate locally; never commit private keys)
+certs/
+*.key
+*.crt
+*.pfx

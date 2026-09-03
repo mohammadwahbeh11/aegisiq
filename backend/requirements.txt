@@ -1,0 +1,30 @@
+# Runtime
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0      # [standard] pulls in websockets, needed by /ws/stream
+sqlalchemy>=2.0.25
+pydantic>=2.6.0
+pydantic-settings>=2.1.0
+python-jose[cryptography]>=3.3.0   # JWT signing/verification (app/auth/security.py)
+passlib[bcrypt]>=1.7.4             # bcrypt password hashing
+bcrypt==4.0.1                      # pinned: passlib 1.7.4 reads bcrypt.__about__, removed in bcrypt 4.1+
+python-multipart>=0.0.9            # OAuth2PasswordBearer form parsing
+httpx>=0.27.0                      # optional Wazuh connector + FastAPI TestClient
+cryptography>=42.0.0              # v2.3: AES-256-GCM data-at-rest (app/security/crypto.py).
+                                  # Also a transitive dep of python-jose[cryptography],
+                                  # pinned here as a direct dependency now that we use it.
+PyYAML>=6.0                       # v2.3: Sigma rule parsing (app/detection/sigma.py).
+                                  # Sigma disables itself cleanly if this is absent.
+# NOTE: TOTP/MFA (app/security/totp.py) is implemented on the Python
+# standard library (hmac/struct/base64) — no pyotp dependency by design.
+
+# --- v2.4 optional event-store backends (LOG_STORE) ---
+# The default LOG_STORE=sqlalchemy needs nothing extra. Install the driver
+# only for the backend you select (see docs/STORAGE.md):
+#   PostgreSQL relational store : psycopg[binary]>=3.1
+#   OpenSearch event store      : opensearch-py>=2.4
+#   ClickHouse event store      : clickhouse-connect>=0.7
+# Kept OUT of the default install so the lightweight profile stays lean;
+# each store module lazy-imports its driver and errors clearly if absent.
+
+# Development / tests
+pytest>=8.0.0

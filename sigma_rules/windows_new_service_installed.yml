@@ -1,0 +1,20 @@
+title: New Windows Service Installed
+id: aegisiq-win-7045
+status: stable
+description: >
+  A new service was installed (Event ID 7045). Legitimate during software
+  installs, but a common persistence and lateral-movement technique
+  (PsExec, malware droppers). Correlate with the service name/path.
+references:
+  - https://attack.mitre.org/techniques/T1543/003/
+tags:
+  - attack.persistence
+  - attack.t1543.003
+logsource:
+  product: windows
+  service: system
+detection:
+  selection:
+    EventID: 7045
+  condition: selection
+level: high

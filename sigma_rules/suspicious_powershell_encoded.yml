@@ -1,0 +1,34 @@
+title: Suspicious Encoded PowerShell Command
+id: aegisiq-ps-encoded
+status: stable
+description: >
+  PowerShell invoked with -EncodedCommand (base64) and/or an
+  execution-policy bypass — a hallmark of fileless malware and
+  download-cradles. Legitimate automation occasionally uses -enc, so
+  correlate with the parent process and the decoded payload.
+references:
+  - https://attack.mitre.org/techniques/T1059/001/
+tags:
+  - attack.execution
+  - attack.t1059.001
+logsource:
+  category: process_creation
+  product: windows
+detection:
+  selection_img:
+    Image|endswith:
+      - '\powershell.exe'
+      - '\pwsh.exe'
+  selection_flags:
+    CommandLine|contains:
+      - ' -enc '
+      - ' -EncodedCommand '
+      - ' -ep bypass'
+      - ' -ExecutionPolicy Bypass'
+      - '-nop -w hidden'
+  keywords:
+    - 'FromBase64String'
+    - 'IEX (New-Object Net.WebClient)'
+    - 'Invoke-Expression'
+  condition: selection_img and (selection_flags or keywords)
+level: high

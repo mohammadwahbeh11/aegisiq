@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+
+    <!--
+      v2.0 hardened Content Security Policy. Backend + frontend ship
+      no CDN dependencies, so we can restrict every fetch to self.
+      * default-src 'self'  — HTML, images, fonts, media: self only
+      * script-src 'self'   — no inline / eval; Vite dev-server needs
+                              its own script but that only runs on the
+                              dev port, not in the deployed build
+      * connect-src 'self' ws: wss: http: https:
+                            — the API URL comes from build-time env
+      * frame-ancestors 'none' — belt-and-braces with X-Frame-Options
+      * base-uri 'none'    — refuse dynamic <base> override attacks
+      * form-action 'self' — form submissions cannot leave the origin
+      Vite injects its own inline scripts during dev — the browser
+      logs a CSP warning that is harmless there and the production
+      build has no inline scripts, so this policy holds in prod.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      script-src 'self';
+      style-src 'self' 'unsafe-inline';
+      img-src 'self' data: blob:;
+      font-src 'self';
+      connect-src 'self' ws: wss: http: https:;
+      frame-ancestors 'none';
+      base-uri 'none';
+      form-action 'self';
+      object-src 'none';
+    " />
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
+
+    <title>AegisIQ — Intelligent Shield SIEM & SOAR</title>
+    <meta name="description" content="AegisIQ — a resource-efficient SIEM & SOAR platform with real MITRE ATT&CK detection and automated response, under 500 MB RAM." />
+
+    <!--
+      Deliberately no CDN <script>/<link> tags. Everything ships in
+      the Vite bundle, so the console renders on an isolated lab
+      network with no internet access.
+    -->
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

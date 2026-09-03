@@ -1,0 +1,100 @@
+# render.yaml — one-click deploy of AegisIQ to Render.com (free tier).
+#
+# Provisions:
+#   * aegisiq-backend   -- FastAPI (Docker build from backend/Dockerfile)
+#                          → https://aegisiq-backend.onrender.com
+#   * aegisiq-frontend  -- Vite static site (built with the backend URL
+#                          baked in as VITE_API_URL)
+#                          → https://aegisiq-frontend.onrender.com
+#
+# How to deploy:
+#   1. Push this repo to GitHub (public or private).
+#   2. In Render: New +  →  Blueprint  →  select the repo.
+#   3. Approve — Render reads this file and creates both services.
+# See docs/DEPLOY_RENDER.md for the full walk-through with screenshots.
+#
+# Free-tier notes (transparent):
+#   * Backend spins down after ~15 min idle; first request wakes it in
+#     ~30 s. Persistent uptime needs a paid plan or a keep-alive ping.
+#   * SQLite lives inside the container filesystem, which is EPHEMERAL on
+#     the free tier — the database is re-created (with default admin +
+#     the 8 detection rules) on every restart/redeploy. Fine for a demo;
+#     for durable data attach a Render PostgreSQL and set DATABASE_URL.
+#   * TLS + free *.onrender.com subdomain are automatic on both services.
+#
+# The service NAMES below (`aegisiq-backend`, `aegisiq-frontend`) control
+# the resulting URLs. Keep them consistent with the CORS_ORIGINS /
+# VITE_API_URL values below; renaming one means updating both.
+
+services:
+  # ── Backend: FastAPI (Docker) ─────────────────────────────────────────
+  - type: web
+    name: aegisiq-backend
+    runtime: docker
+    plan: free
+    region: frankfurt          # closest EU region; change if you prefer
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    # Render injects $PORT dynamically; the baked CMD hardcodes 8000,
+    # so override it here.
+    dockerCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite:////app/data/siem.db
+      # Auto-generated on first deploy; Render keeps them and never
+      # reveals them to Claude. Regenerate any time from the Render UI.
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATA_ENCRYPTION_KEY
+        generateValue: true
+      - key: DEFAULT_ADMIN_USERNAME
+        value: admin
+      - key: DEFAULT_ADMIN_PASSWORD
+        # Change from the Render UI after the first successful deploy —
+        # this is the password you log into the console with.
+        generateValue: true
+      - key: ENV
+        value: production
+      - key: SOAR_ENABLED
+        value: "true"
+      - key: SOAR_EXECUTE
+        value: "false"
+      # CORS: the frontend's public URL. Hardcoded to match the sibling
+      # service name below; if you rename the frontend, update both.
+      - key: CORS_ORIGINS
+        value: https://aegisiq-frontend.onrender.com
+
+  # ── Frontend: Vite build → static hosting ─────────────────────────────
+  - type: web
+    name: aegisiq-frontend
+    runtime: static
+    plan: free
+    region: frankfurt
+    rootDir: frontend
+    buildCommand: npm ci --no-audit --no-fund && npm run build
+    staticPublishPath: ./dist
+    # SPA rewrite so refreshing on /alerts/42 doesn't 404.
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    # Sane security headers on the static bundle (backend already sets
+    # its own on API responses).
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+    envVars:
+      # Build-time only: the API URL baked into the bundle. Hardcoded to
+      # match the sibling backend service name above. streamUrl() upgrades
+      # https:// → wss:// automatically for the live alert stream.
+      - key: VITE_API_URL
+        value: https://aegisiq-backend.onrender.com

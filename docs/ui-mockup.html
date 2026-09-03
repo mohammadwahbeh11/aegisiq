@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lightweight SIEM & SOAR - Security Operations Center</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-slate-900 border-b border-slate-800 px-6 py-4 flex justify-between items-center shadow-lg">
+        <div class="flex items-center space-x-3">
+            <div class="bg-emerald-500/10 p-2.5 rounded-lg border border-emerald-500/20">
+                <i class="fa-solid fa-shield-halved text-emerald-400 text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-wider text-slate-100">SIEM & <span class="text-emerald-400">SOAR</span> SOC</h1>
+                <p class="text-xs text-slate-400">Security Information & Automated Response Dashboard</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-4">
+            <!-- Live Date and Time Badge -->
+            <div class="hidden md:flex items-center space-x-2 bg-slate-800/60 px-3 py-1.5 rounded-full border border-slate-700/50">
+                <i class="fa-regular fa-clock text-emerald-400 text-xs"></i>
+                <span id="live-datetime" class="text-xs font-mono text-slate-300">Loading...</span>
+            </div>
+            <div class="flex items-center space-x-2 bg-slate-800/60 px-3 py-1.5 rounded-full border border-slate-700/50">
+                <span class="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                <span class="text-xs font-medium text-emerald-400">Backend Connected (8000)</span>
+            </div>
+            <button onclick="loadData()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3.5 py-2 rounded-lg border border-slate-700 transition flex items-center space-x-1.5">
+                <i class="fa-solid fa-rotate-right"></i>
+                <span>Sync</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Grid -->
+    <main class="flex-1 p-6 max-w-[1600px] w-full mx-auto space-y-6">
+
+        <!-- Top Metrics Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-5">
+            <div class="bg-slate-900/85 backdrop-blur border border-slate-800 p-5 rounded-xl shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-xs font-semibold uppercase tracking-wider">Total Ingested Logs</p>
+                    <h3 id="logs-count" class="text-3xl font-extrabold mt-1 text-sky-400">0</h3>
+                </div>
+                <div class="bg-sky-500/10 p-3.5 rounded-xl border border-sky-500/20">
+                    <i class="fa-solid fa-file-lines text-sky-400 text-xl"></i>
+                </div>
+            </div>
+            <div class="bg-slate-900/85 backdrop-blur border border-slate-800 p-5 rounded-xl shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-xs font-semibold uppercase tracking-wider">Active Security Alerts</p>
+                    <h3 id="alerts-count" class="text-3xl font-extrabold mt-1 text-rose-500">0</h3>
+                </div>
+                <div class="bg-rose-500/10 p-3.5 rounded-xl border border-rose-500/20">
+                    <i class="fa-solid fa-triangle-exclamation text-rose-500 text-xl"></i>
+                </div>
+            </div>
+            <div class="bg-slate-900/85 backdrop-blur border border-slate-800 p-5 rounded-xl shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-xs font-semibold uppercase tracking-wider">Automated Mitigations</p>
+                    <h3 id="soar-count" class="text-3xl font-extrabold mt-1 text-emerald-400">0</h3>
+                </div>
+                <div class="bg-emerald-500/10 p-3.5 rounded-xl border border-emerald-500/20">
+                    <i class="fa-solid fa-robot text-emerald-400 text-xl"></i>
+                </div>
+            </div>
+            <div class="bg-slate-900/85 backdrop-blur border border-slate-800 p-5 rounded-xl shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-xs font-semibold uppercase tracking-wider">Classification Policy</p>
+                    <h3 class="text-xl font-bold mt-1 text-purple-400">MITRE Mapped</h3>
+                </div>
+                <div class="bg-purple-500/10 p-3.5 rounded-xl border border-purple-500/20">
+                    <i class="fa-solid fa-shield-halved text-purple-400 text-xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Middle Section: Chart & Policy Matrix Panel -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Chart Container -->
+            <div class="bg-slate-900/85 backdrop-blur border border-slate-800 p-5 rounded-xl shadow-sm flex flex-col justify-between">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="font-bold text-sm text-slate-200 flex items-center">
+                        <i class="fa-solid fa-chart-pie mr-2 text-emerald-400"></i> Severity Distribution
+                    </h2>
+                    <span class="text-[11px] bg-slate-800 px-2 py-0.5 rounded text-slate-400">Policy Governed</span>
+                </div>
+                <div class="relative w-full h-[220px] flex items-center justify-center">
+                    <canvas id="severityChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Data Classification Policy Overview Panel -->
+            <div class="lg:col-span-2 bg-slate-900/85 backdrop-blur border border-slate-800 p-5 rounded-xl shadow-sm flex flex-col justify-between">
+                <div>
+                    <h2 class="font-bold text-sm text-slate-200 mb-3 flex items-center">
+                        <i class="fa-solid fa-list-check mr-2 text-sky-400"></i> Data Classification & MITRE ATT&CK Framework
+                    </h2>
+                    <p class="text-xs text-slate-400 leading-relaxed mb-4">
+                        System events and Wazuh telemetry are categorized according to a strict security policy matrix integrated with MITRE ATT&CK techniques, coupled with automated SOAR playbooks for rapid threat isolation.
+                    </p>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
+                    <div class="bg-slate-950/60 p-3 rounded-lg border border-red-900/40 text-center">
+                        <span class="block text-[11px] text-red-400 font-semibold uppercase">Critical</span>
+                        <span id="stat-critical" class="text-xl font-bold text-red-500">0</span>
+                    </div>
+                    <div class="bg-slate-950/60 p-3 rounded-lg border border-rose-900/40 text-center">
+                        <span class="block text-[11px] text-rose-400 font-semibold uppercase">High</span>
+                        <span id="stat-high" class="text-xl font-bold text-rose-400">0</span>
+                    </div>
+                    <div class="bg-slate-950/60 p-3 rounded-lg border border-amber-900/40 text-center">
+                        <span class="block text-[11px] text-amber-400 font-semibold uppercase">Medium</span>
+                        <span id="stat-medium" class="text-xl font-bold text-amber-400">0</span>
+                    </div>
+                    <div class="bg-slate-950/60 p-3 rounded-lg border border-sky-900/40 text-center">
+                        <span class="block text-[11px] text-sky-400 font-semibold uppercase">Low</span>
+                        <span id="stat-low" class="text-xl font-bold text-sky-400">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Automated SOAR Responses Table Section -->
+        <div class="bg-slate-900/85 backdrop-blur border border-slate-800 rounded-xl shadow-sm overflow-hidden flex flex-col">
+            <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/90">
+                <h2 class="font-bold text-sm text-emerald-400 flex items-center">
+                    <i class="fa-solid fa-robot mr-2"></i> Automated SOAR Playbooks & Firewall Mitigations
+                </h2>
+                <span class="text-xs bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 font-mono">Active Response</span>
+            </div>
+            <div class="overflow-x-auto max-h-[280px] overflow-y-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-slate-950/90 text-slate-400 uppercase text-[11px] sticky top-0 tracking-wider">
+                        <tr>
+                            <th class="p-3">Action Type</th>
+                            <th class="p-3">Target IP Address</th>
+                            <th class="p-3">Trigger Rule / Event</th>
+                            <th class="p-3">Mitigation Status</th>
+                            <th class="p-3">Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody id="soar-table" class="divide-y divide-slate-800/60 font-mono text-xs">
+                        <!-- Populated dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Wazuh Agents Section -->
+        <div class="bg-slate-900/85 backdrop-blur border border-slate-800 rounded-xl shadow-sm overflow-hidden flex flex-col">
+            <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/90">
+                <h2 class="font-bold text-sm text-emerald-400 flex items-center">
+                    <i class="fa-solid fa-network-wired mr-2"></i> Wazuh Monitored Endpoints & Agents
+                </h2>
+                <span id="agents-source-badge" class="text-xs bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 font-mono">Syncing...</span>
+            </div>
+            <div class="overflow-x-auto max-h-[280px] overflow-y-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-slate-950/90 text-slate-400 uppercase text-[11px] sticky top-0 tracking-wider">
+                        <tr>
+                            <th class="p-3">Agent ID</th>
+                            <th class="p-3">Agent Name</th>
+                            <th class="p-3">IP Address</th>
+                            <th class="p-3">Operating System</th>
+                            <th class="p-3">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="agents-table" class="divide-y divide-slate-800/60 font-mono text-xs">
+                        <!-- Populated dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tables Section: Alerts & Logs -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            <!-- Security Alerts Table -->
+            <div class="bg-slate-900/85 backdrop-blur border border-slate-800 rounded-xl shadow-sm overflow-hidden flex flex-col">
+                <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/90">
+                    <h2 class="font-bold text-sm text-rose-400 flex items-center">
+                        <i class="fa-solid fa-bell mr-2"></i> Triggered Security Alerts & MITRE
+                    </h2>
+                    <span class="text-xs bg-rose-500/10 text-rose-400 px-2 py-0.5 rounded border border-rose-500/20 font-mono">MITRE Mapped</span>
+                </div>
+                <div class="overflow-x-auto max-h-[380px] overflow-y-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-slate-950/90 text-slate-400 uppercase text-[11px] sticky top-0 tracking-wider">
+                            <tr>
+                                <th class="p-3">Severity</th>
+                                <th class="p-3">Rule Name / Description</th>
+                                <th class="p-3">MITRE Technique</th>
+                                <th class="p-3">Source IP</th>
+                                <th class="p-3">Timestamp</th>
+                            </tr>
+                        </thead>
+                        <tbody id="alerts-table" class="divide-y divide-slate-800/60 font-mono text-xs">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Ingested Logs Table -->
+            <div class="bg-slate-900/85 backdrop-blur border border-slate-800 rounded-xl shadow-sm overflow-hidden flex flex-col">
+                <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/90">
+                    <h2 class="font-bold text-sm text-sky-400 flex items-center">
+                        <i class="fa-solid fa-terminal mr-2"></i> Raw System Logs Stream
+                    </h2>
+                    <span class="text-xs bg-sky-500/10 text-sky-400 px-2 py-0.5 rounded border border-sky-500/20 font-mono">Live Feed</span>
+                </div>
+                <div class="overflow-x-auto max-h-[380px] overflow-y-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-slate-950/90 text-slate-400 uppercase text-[11px] sticky top-0 tracking-wider">
+                            <tr>
+                                <th class="p-3">Host</th>
+                                <th class="p-3">Event Type</th>
+                                <th class="p-3">Source IP</th>
+                                <th class="p-3">Severity</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logs-table" class="divide-y divide-slate-800/60 font-mono text-xs">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- JavaScript Handling API Calls & Dynamic Chart Rendering -->
+    <script>
+        const API_URL = "http://localhost:8000";
+        let severityChartInstance = null;
+
+        // Live Clock Functionality
+        function updateLiveClock() {
+            const now = new Date();
+            const options = { 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric', 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit',
+                hour12: true 
+            };
+            const clockEl = document.getElementById('live-datetime');
+            if (clockEl) {
+                clockEl.innerText = now.toLocaleDateString('en-US', options);
+            }
+        }
+        updateLiveClock();
+        setInterval(updateLiveClock, 1000);
+
+        async function loadData() {
+            try {
+                // 1. Fetch Logs
+                const logsRes = await fetch(`${API_URL}/api/logs`);
+                const logsData = await logsRes.json();
+                const logs = logsData.logs || [];
+                document.getElementById('logs-count').innerText = logs.length;
+                
+                const logsTable = document.getElementById('logs-table');
+                logsTable.innerHTML = "";
+                logs.forEach(log => {
+                    logsTable.innerHTML += `
+                        <tr class="hover:bg-slate-800/40 transition">
+                            <td class="p-3 font-medium text-slate-300">${log.hostname || 'N/A'}</td>
+                            <td class="p-3 text-sky-300">${log.event_type || 'N/A'}</td>
+                            <td class="p-3 text-slate-400">${log.source_ip || 'N/A'}</td>
+                            <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700">${log.severity || 'low'}</span></td>
+                        </tr>
+                    `;
+                });
+
+                // 2. Fetch Alerts
+                const alertsRes = await fetch(`${API_URL}/api/alerts`);
+                const alerts = await alertsRes.json();
+                document.getElementById('alerts-count').innerText = alerts.length;
+
+                // 3. Fetch SOAR Actions
+                const soarRes = await fetch(`${API_URL}/api/soar/actions`);
+                const soarData = await soarRes.json();
+                const soarActions = soarData.actions || [];
+                document.getElementById('soar-count').innerText = soarActions.length;
+
+                const soarTable = document.getElementById('soar-table');
+                soarTable.innerHTML = "";
+                soarActions.forEach(action => {
+                    soarTable.innerHTML += `
+                        <tr class="hover:bg-slate-800/40 transition">
+                            <td class="p-3 text-emerald-300 font-medium">${action.action_type}</td>
+                            <td class="p-3 text-rose-400 font-mono">${action.target_ip}</td>
+                            <td class="p-3 text-slate-300">${action.rule_triggered || 'Manual Trigger'}</td>
+                            <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">${action.status}</span></td>
+                            <td class="p-3 text-slate-500 text-[11px]">${action.timestamp ? new Date(action.timestamp).toLocaleTimeString() : 'N/A'}</td>
+                        </tr>
+                    `;
+                });
+
+                // 4. Fetch Wazuh Agents
+                const agentsRes = await fetch(`${API_URL}/api/agents`);
+                const agentsData = await agentsRes.json();
+                
+                const sourceBadge = document.getElementById('agents-source-badge');
+                if (sourceBadge) {
+                    sourceBadge.innerText = `Source: ${agentsData.source ? agentsData.source.toUpperCase() : 'UNKNOWN'}`;
+                }
+
+                const agentsTable = document.getElementById('agents-table');
+                agentsTable.innerHTML = "";
+                if (agentsData.agents) {
+                    agentsData.agents.forEach(agent => {
+                        let statusColor = agent.status === 'active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border-amber-500/30';
+                        agentsTable.innerHTML += `
+                            <tr class="hover:bg-slate-800/40 transition">
+                                <td class="p-3 text-emerald-300">#${agent.id}</td>
+                                <td class="p-3 font-medium text-slate-200">${agent.name}</td>
+                                <td class="p-3 text-slate-400">${agent.ip}</td>
+                                <td class="p-3 text-slate-300">${agent.os}</td>
+                                <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] border ${statusColor}">${agent.status}</span></td>
+                            </tr>
+                        `;
+                    });
+                }
+
+                // 5. Count Severities for Chart & Stats Panels
+                let counts = { critical: 0, high: 0, medium: 0, low: 0 };
+
+                const alertsTable = document.getElementById('alerts-table');
+                alertsTable.innerHTML = "";
+                
+                alerts.forEach(alert => {
+                    let sev = alert.severity ? alert.severity.toLowerCase() : 'medium';
+                    if (counts[sev] !== undefined) {
+                        counts[sev]++;
+                    } else {
+                        counts['medium']++;
+                    }
+
+                    let badgeClass = 'bg-amber-500/10 text-amber-400 border border-amber-500/30';
+                    if (sev === 'critical') {
+                        badgeClass = 'bg-red-600/20 text-red-500 border border-red-600/30 font-bold';
+                    } else if (sev === 'high') {
+                        badgeClass = 'bg-rose-500/10 text-rose-400 border border-rose-500/30';
+                    } else if (sev === 'low') {
+                        badgeClass = 'bg-sky-500/10 text-sky-400 border border-sky-500/30';
+                    }
+
+                    let mitreBadge = alert.mitre_technique 
+                        ? `<span class="px-2 py-0.5 rounded text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/30 font-mono">${alert.mitre_technique}</span>` 
+                        : `<span class="text-slate-500">N/A</span>`;
+
+                    alertsTable.innerHTML += `
+                        <tr class="hover:bg-slate-800/40 transition">
+                            <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] ${badgeClass}">${alert.severity.toUpperCase()}</span></td>
+                            <td class="p-3 text-slate-200">${alert.rule_name}</td>
+                            <td class="p-3">${mitreBadge}</td>
+                            <td class="p-3 text-slate-400">${alert.source_ip}</td>
+                            <td class="p-3 text-slate-500 text-[11px]">${alert.timestamp ? new Date(alert.timestamp).toLocaleTimeString() : 'N/A'}</td>
+                        </tr>
+                    `;
+                });
+
+                document.getElementById('stat-critical').innerText = counts.critical;
+                document.getElementById('stat-high').innerText = counts.high;
+                document.getElementById('stat-medium').innerText = counts.medium;
+                document.getElementById('stat-low').innerText = counts.low;
+
+                updateChart(counts);
+
+            } catch (err) {
+                console.error("Error communicating with SIEM API backend:", err);
+            }
+        }
+
+        function updateChart(counts) {
+            const ctx = document.getElementById('severityChart').getContext('2d');
+            
+            if (severityChartInstance) {
+                severityChartInstance.data.datasets[0].data = [counts.critical, counts.high, counts.medium, counts.low];
+                severityChartInstance.update();
+                return;
+            }
+
+            severityChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Critical', 'High', 'Medium', 'Low'],
+                    datasets: [{
+                        data: [counts.critical, counts.high, counts.medium, counts.low],
+                        backgroundColor: [
+                            '#dc2626', // Critical (Red)
+                            '#f97316', // High (Orange)
+                            '#eab308', // Medium (Yellow)
+                            '#0ea5e9'  // Low (Sky Blue)
+                        ],
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                color: '#94a3b8',
+                                font: { size: 11, family: 'sans-serif' },
+                                boxWidth: 12,
+                                padding: 15
+                            }
+                        }
+                    },
+                    cutout: '70%'
+                }
+            });
+        }
+
+        loadData();
+        setInterval(loadData, 5000);
+    </script>
+</body>
+</html>
