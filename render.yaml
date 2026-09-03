@@ -70,7 +70,6 @@ services:
   - type: web
     name: aegisiq-frontend
     runtime: static
-    plan: free
     rootDir: frontend
     buildCommand: npm ci --no-audit --no-fund && npm run build
     staticPublishPath: ./dist
