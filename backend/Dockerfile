@@ -27,4 +27,7 @@ EXPOSE 8000
 # Boot the REAL FastAPI backend (app/main.py), NOT the legacy
 # in-memory prototype at /app/main.py. The prototype file is kept
 # only for historical reference and is never launched.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use $PORT if the host injects one (Render, Koyeb, Fly.io, …); default to
+# 8000 for docker-compose and bare `docker run`. Shell form so ${PORT:-8000}
+# actually expands at container start.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
