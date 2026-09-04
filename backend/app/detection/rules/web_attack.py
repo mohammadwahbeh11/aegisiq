@@ -60,18 +60,45 @@ _DEFAULT_PATTERNS: list[tuple[str, str]] = [
 ]
 
 
+def _decode_layers(value: str, rounds: int = 2) -> list[str]:
+    """Return the value plus its URL-decoded forms.
+
+    An attacker does not send `UNION SELECT` with a literal space in an HTTP
+    request -- the browser/tool percent-encodes it to `UNION%20SELECT`, and
+    sqlmap and friends often double-encode (`UNION%2520SELECT`) specifically
+    to slip past naive signature matching. Scanning only the raw request line
+    therefore MISSES the encoded form of every space-bearing signature
+    (UNION SELECT, the OR 1=1 variants, path traversal), which is the common
+    case, not the exception. Decoding a couple of layers and scanning each
+    closes that evasion without changing a single pattern. `+` is treated as
+    a space per application/x-www-form-urlencoded.
+    """
+    from urllib.parse import unquote_plus
+
+    seen = [value]
+    current = value
+    for _ in range(rounds):
+        decoded = unquote_plus(current)
+        if decoded == current:
+            break
+        seen.append(decoded)
+        current = decoded
+    return seen
+
+
 def _extract_targets(log: Log) -> str:
-    """The three strings we scan, joined. Uses whatever the normalizer
-    made available on this event."""
+    """The strings we scan, joined. Uses whatever the normalizer made
+    available on this event, and includes URL-decoded forms so a
+    percent-encoded attack is matched the same as a plaintext one."""
     parts: list[str] = []
     data = log.normalized_data or {}
     if isinstance(data, dict):
         for key in ("url", "request_line", "path", "query", "body", "user_agent"):
             v = data.get(key)
             if isinstance(v, str) and v:
-                parts.append(v)
+                parts.extend(_decode_layers(v))
     if log.raw_log:
-        parts.append(log.raw_log)
+        parts.extend(_decode_layers(log.raw_log))
     return "  ".join(parts)
 
 
