@@ -62,6 +62,15 @@ const MAX_LIVE_SOAR = 50;
 const MAX_TOASTS = 4;
 const TOAST_DISMISS_MS = 12000;
 
+// Keepalive for the alert socket. A deployed console sits behind a proxy
+// (Render/Cloudflare) that closes a WebSocket which has carried no traffic
+// for ~100 s, and a quiet SOC is exactly a socket with no traffic -- so in
+// production the live feed would drop and reconnect on a loop whenever no
+// alerts were firing. Nothing like that happens on localhost, which is why
+// it never showed up in development. The backend already answers a "ping"
+// frame with "pong" for precisely this reason (app/api/routes/stream.py);
+// this is the client half that was missing.
+const HEARTBEAT_MS = 25000;
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
 
@@ -129,6 +138,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
 
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
+  const heartbeatRef = useRef<number | null>(null);
   const attemptRef = useRef(0);
   const alertHandlersRef = useRef(new Set<(alert: Alert) => void>());
   // Guards against a reconnect being scheduled after the provider has
@@ -226,6 +236,11 @@ export function LiveProvider({ children }: { children: ReactNode }) {
     socket.onopen = () => {
       attemptRef.current = 0;
       setConnection("live");
+      // Keep the connection warm through the proxy (see HEARTBEAT_MS).
+      if (heartbeatRef.current !== null) window.clearInterval(heartbeatRef.current);
+      heartbeatRef.current = window.setInterval(() => {
+        if (socket.readyState === WebSocket.OPEN) socket.send("ping");
+      }, HEARTBEAT_MS);
     };
 
     socket.onmessage = (event) => {
@@ -238,6 +253,10 @@ export function LiveProvider({ children }: { children: ReactNode }) {
 
     socket.onclose = (event) => {
       socketRef.current = null;
+      if (heartbeatRef.current !== null) {
+        window.clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
+      }
       if (!activeRef.current) return;
 
       // 1008 is the policy-violation code the backend uses for an
@@ -279,6 +298,10 @@ export function LiveProvider({ children }: { children: ReactNode }) {
       if (reconnectTimerRef.current !== null) {
         window.clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = null;
+      }
+      if (heartbeatRef.current !== null) {
+        window.clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
       }
       socketRef.current?.close();
       socketRef.current = null;
