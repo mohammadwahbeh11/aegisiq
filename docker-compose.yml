@@ -11,7 +11,11 @@
 
 services:
   backend:
-    build: ./backend
+    # Context is the repo root (not ./backend) because the image also needs
+    # sigma_rules/, which lives at the root. See backend/Dockerfile.
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: siem-backend
     ports:
       - "8000:8000"

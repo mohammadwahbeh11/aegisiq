@@ -177,7 +177,11 @@ DEFAULT_RULES = [
         time_window_seconds=120,
         severity=Severity.CRITICAL,
         mitre_id="T1110.004",
-        kill_chain_phase="Credential Access",
+        # Lockheed Martin Kill Chain phase, NOT the MITRE tactic. "Credential
+        # Access" is a MITRE ATT&CK tactic and was seeded here by mistake;
+        # the Kill Chain phase for authenticating with stolen credentials is
+        # Exploitation -- the same phase login_after_failure (T1078) carries.
+        kill_chain_phase="Exploitation",
     ),
     dict(
         name="Suspicious User-Agent",
@@ -349,6 +353,10 @@ def _backfill_alert_dedup_keys(db: Session) -> None:
 _KILL_CHAIN_PHASE_CORRECTIONS = {
     "brute_force": "Actions on Objectives",
     "login_after_failure": "Exploitation",
+    # credential_stuffing shipped in v2.0 with the same category error and
+    # was missed by this map, so every database seeded since then still
+    # carries the tactic name in the phase column.
+    "credential_stuffing": "Exploitation",
 }
 _STALE_KILL_CHAIN_PHASE_VALUE = "Credential Access"
 

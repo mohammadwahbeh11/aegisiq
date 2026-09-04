@@ -1,0 +1,64 @@
+# Build context hygiene. The backend image builds from the REPOSITORY ROOT
+# (see backend/Dockerfile) so everything below would otherwise be uploaded
+# to the daemon on every build. Most of it is already gitignored — this
+# matters for LOCAL builds, where the working tree contains venvs, the dev
+# database and downloaded binaries that the Render build (which sees only
+# committed files) never has.
+
+.git/
+.gitignore
+
+# Python virtualenvs / caches
+venv/
+.venv/
+backend/venv/
+backend/.venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Frontend build artifacts — the backend image needs none of them, and the
+# frontend image builds from ./frontend with its own context.
+frontend/node_modules/
+frontend/dist/
+node_modules/
+
+# Databases, backups and local runtime state. A stale demo database must
+# never be baked into a published image.
+data/
+backend/data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.stale_*
+*.bak
+*.corrupted_*
+
+# Secrets and key material
+.env
+frontend/.env
+*.env.local
+certs/
+*.pem
+*.key
+*.crt
+*.pfx
+
+# Local tooling / large binaries that are not part of the application
+cloudflared*
+*.exe
+*.lnk
+_to_delete/
+
+# Docs and editor noise — not needed at runtime
+docs/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

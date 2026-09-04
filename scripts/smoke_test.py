@@ -41,6 +41,17 @@ import re
 import ssl
 import struct
 import sys
+
+# The status glyphs below (checkmarks, arrows) are not encodable in cp1252,
+# which is still the default console encoding on Windows. Without this the
+# script dies with UnicodeEncodeError on its very first print -- before any
+# check runs -- which reads like the SIEM is broken when it is not.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):  # non-reconfigurable stream: harmless
+        pass
+
 import time
 import urllib.error
 import urllib.request

@@ -17,6 +17,26 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.main import app  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limiters():
+    """Empty the auth/mutate token buckets before every test.
+
+    The limiters in app/security/rate_limit.py are module-level singletons
+    keyed by source IP. Every test in the suite talks to the app from the
+    same process and the same TestClient peer address, so their buckets are
+    shared: past ~10 logins the whole run collapses into 429s and every
+    later test errors in `admin_token` setup rather than exercising the code
+    it was written for. Resetting per test isolates them without weakening
+    the limiter itself -- rate limiting is still asserted explicitly by the
+    tests that care about it.
+    """
+    from app.security.rate_limit import auth_limiter, mutate_limiter
+
+    auth_limiter.reset()
+    mutate_limiter.reset()
+    yield
+
+
 @pytest.fixture()
 def client():
     # Entering the context manager runs the app's lifespan (init_db()),
