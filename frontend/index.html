@@ -14,7 +14,10 @@
                               dev port, not in the deployed build
       * connect-src 'self' ws: wss: http: https:
                             — the API URL comes from build-time env
-      * frame-ancestors 'none' — belt-and-braces with X-Frame-Options
+      * frame-ancestors is NOT set here: browsers ignore it in a
+        <meta> CSP (and log an error for it). Clickjacking is
+        covered by the X-Frame-Options and Content-Security-Policy
+        HEADERS the host sets -- see render.yaml.
       * base-uri 'none'    — refuse dynamic <base> override attacks
       * form-action 'self' — form submissions cannot leave the origin
       Vite injects its own inline scripts during dev — the browser
@@ -28,7 +31,6 @@
       img-src 'self' data: blob:;
       font-src 'self';
       connect-src 'self' ws: wss: http: https:;
-      frame-ancestors 'none';
       base-uri 'none';
       form-action 'self';
       object-src 'none';

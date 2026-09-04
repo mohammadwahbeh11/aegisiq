@@ -102,6 +102,13 @@ services:
       - path: /*
         name: Referrer-Policy
         value: strict-origin-when-cross-origin
+      # frame-ancestors only works as a HEADER -- the <meta> CSP in
+      # index.html cannot enforce it and browsers log an error for trying.
+      # Scoped to this one directive so it adds clickjacking protection
+      # without constraining anything else the page already loads.
+      - path: /*
+        name: Content-Security-Policy
+        value: "frame-ancestors 'none'"
     envVars:
       # Pin the toolchain: the build runs `tsc -b && vite build`, and
       # letting Render drift onto a different major Node release is a
