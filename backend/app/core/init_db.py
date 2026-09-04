@@ -19,7 +19,9 @@ Design decisions, documented rather than hidden:
   Valid Accounts, T1098 Account Manipulation, T1548 Abuse Elevation
   Control Mechanism), satisfying objective O6.
 """
-from sqlalchemy import text
+import logging
+
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from app.auth.security import hash_password
@@ -44,6 +46,8 @@ from app.models.analysis import AnalysisReport  # noqa: F401
 
 settings = get_settings()
 
+
+logger = logging.getLogger(__name__)
 DEFAULT_RULES = [
     dict(
         name="Brute Force Authentication",
@@ -265,19 +269,37 @@ def _ensure_log_table_columns() -> None:
 
 
 def _ensure_columns(table_name: str, required_columns: dict[str, str]) -> None:
-    """Generalized version of the same small SQLite-only 'migration'
-    described above -- adds any of `required_columns` that are missing
-    from an already-existing table, without touching existing rows."""
-    if engine.dialect.name != "sqlite":
+    """Add any of `required_columns` missing from an already-existing table,
+    without touching existing rows.
+
+    Dialect-neutral on purpose. This used to early-return for anything that
+    was not SQLite, which is harmless on a FRESH database of any engine
+    (create_all builds every column) but silently wrong when an existing
+    PostgreSQL database is upgraded across a release that adds one: the
+    column would never be added and the first query touching it would fail
+    at runtime, in production, with no migration step to point at.
+
+    Uses SQLAlchemy's inspector rather than `PRAGMA table_info`, and plain
+    `ALTER TABLE ... ADD COLUMN`, which both SQLite and PostgreSQL accept.
+    Additive only -- it never drops or rewrites a column, so it cannot
+    destroy data. It remains a stopgap, not a migration system: see
+    docs/DATABASE.md for why Alembic is the next step.
+    """
+    inspector = inspect(engine)
+    if table_name not in inspector.get_table_names():
+        return  # create_all() will have just built it with every column
+    existing = {column["name"] for column in inspector.get_columns(table_name)}
+    if not existing:
+        return
+
+    missing = {c: t for c, t in required_columns.items() if c not in existing}
+    if not missing:
         return
 
     with engine.connect() as conn:
-        existing = {row[1] for row in conn.execute(text(f"PRAGMA table_info({table_name})"))}
-        if not existing:
-            return  # table doesn't exist yet -- create_all() just made it with every column already
-        for column, sql_type in required_columns.items():
-            if column not in existing:
-                conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column} {sql_type}"))
+        for column, sql_type in missing.items():
+            logger.info("adding missing column %s.%s (%s)", table_name, column, sql_type)
+            conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column} {sql_type}"))
         conn.commit()
 
 
