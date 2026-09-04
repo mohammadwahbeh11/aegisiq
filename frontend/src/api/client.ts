@@ -1,6 +1,34 @@
 import axios from "axios";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+/**
+ * Absolute base URL of the API, taken from the build-time VITE_API_URL.
+ *
+ * Normalised rather than used raw, because the two ways this value is wrong
+ * in practice both fail silently and look like an outage:
+ *
+ *  - No scheme (e.g. a host copied straight out of the Render dashboard,
+ *    "aegisiq-backend-abcd.onrender.com"). axios then treats it as a RELATIVE
+ *    path, so every API call goes to the console's own origin and 404s, and
+ *    streamUrl() resolves it against window.location instead of the backend.
+ *  - A trailing slash, which turns every request path into a double slash.
+ *
+ * A leading "/" is left alone: that is a deliberate same-origin deployment
+ * (API and console behind one host), which this client supports.
+ */
+function resolveApiUrl(raw: string | undefined): string {
+  const value = (raw ?? "").trim().replace(/\/+$/, "");
+  if (!value) return "http://localhost:8000";
+  if (/^https?:\/\//i.test(value)) return value;
+  if (value.startsWith("/")) return value;
+  // Bare host[:port]: adopt the transport the console itself is served over,
+  // so an https console never downgrades its API calls to http (which the
+  // browser would block as mixed content anyway).
+  const scheme =
+    typeof window !== "undefined" && window.location.protocol === "http:" ? "http" : "https";
+  return `${scheme}://${value}`;
+}
+
+const API_URL = resolveApiUrl(import.meta.env.VITE_API_URL);
 
 export const apiClient = axios.create({ baseURL: API_URL });
 

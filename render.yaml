@@ -2,7 +2,8 @@
 #
 # Provisions two services:
 #   * aegisiq-backend   -- FastAPI, built from backend/Dockerfile
-#                          → https://aegisiq-backend.onrender.com
+#                          → https://aegisiq-backend-md69.onrender.com
+#                            (Render suffixed the hostname; see VITE_API_URL)
 #   * aegisiq-frontend  -- Vite static site, built with the backend URL
 #                          baked in as VITE_API_URL
 #                          → https://aegisiq-frontend.onrender.com
@@ -110,5 +111,15 @@ services:
       # Build-time only — baked into the bundle, so it must never hold a
       # secret. streamUrl() in src/api/client.ts derives the WebSocket URL
       # from this value, upgrading https:// → wss:// automatically.
+      # MUST match the backend's ACTUAL hostname. Render appends a random
+      # suffix (here "-md69") when the bare service name is already taken,
+      # so this is NOT derivable from the service name above -- the console
+      # previously shipped pointing at https://aegisiq-backend.onrender.com,
+      # which resolves but has no service behind it, so every API call and
+      # the alert WebSocket hung with no response. Verified live before
+      # committing. If you ever recreate the backend service, Render may
+      # issue a new suffix: re-check the URL on the service page and update
+      # this value, then redeploy the frontend (VITE_* is BUILD-TIME, so a
+      # rebuild is required for a change here to reach the browser).
       - key: VITE_API_URL
-        value: https://aegisiq-backend.onrender.com
+        value: https://aegisiq-backend-md69.onrender.com
