@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_db
 from app.auth.dependencies import get_current_user, require_role
+from app.security.rate_limit import enforce_mutate
 from app.models.alert import Alert, AlertStatus, AlertStatusHistory
 from app.models.log import Log, Severity
 from app.models.rule import DetectionRule
@@ -258,7 +259,7 @@ def update_alert_status(
     return _to_out(alert)
 
 
-@router.delete("/{alert_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{alert_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(enforce_mutate)])
 def delete_alert(
     alert_id: int,
     db: Session = Depends(get_db),
@@ -291,7 +292,7 @@ def delete_alert(
     return None
 
 
-@router.post("/bulk-delete", status_code=status.HTTP_200_OK)
+@router.post("/bulk-delete", status_code=status.HTTP_200_OK, dependencies=[Depends(enforce_mutate)])
 def bulk_delete_alerts(
     payload: dict,
     db: Session = Depends(get_db),

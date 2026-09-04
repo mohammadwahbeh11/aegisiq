@@ -44,6 +44,17 @@ logger = logging.getLogger(__name__)
 # endpoints (/api/alerts, /api/logs), which are the real source of truth.
 REPLAY_BUFFER_SIZE = 50
 
+# Ceiling on simultaneous live sockets. The connection set was previously
+# unbounded, so a single authenticated client could open sockets until the
+# process ran out of file descriptors and took the API down with it -- the
+# console is the one place a SIEM cannot afford to lose. 200 is far above
+# any real console usage (a handful of analysts with a few tabs each) and
+# far below the point where a single-worker uvicorn suffers, so it costs
+# legitimate users nothing. Refused clients get 1013 "try again later",
+# which the frontend's existing backoff already treats as retryable.
+MAX_CONNECTIONS = 200
+WS_TRY_AGAIN_LATER = 1013
+
 # Event type names, referenced by the frontend's WebSocket client.
 EVENT_LOG = "log"
 EVENT_ALERT = "alert"
@@ -68,9 +79,21 @@ class EventHub:
     def unbind_loop(self) -> None:
         self._loop = None
 
-    async def connect(self, websocket: WebSocket) -> None:
+    async def connect(self, websocket: WebSocket) -> bool:
+        """Accept and register a socket. Returns False (and closes it) when
+        the hub is at capacity, so the caller can stop rather than assume
+        it was registered."""
+        if len(self._connections) >= MAX_CONNECTIONS:
+            logger.warning(
+                "refusing WebSocket: hub at capacity (%d connections)",
+                len(self._connections),
+            )
+            await websocket.accept()
+            await websocket.close(code=WS_TRY_AGAIN_LATER, reason="Server at capacity")
+            return False
         await websocket.accept()
         self._connections.add(websocket)
+        return True
 
     def disconnect(self, websocket: WebSocket) -> None:
         self._connections.discard(websocket)

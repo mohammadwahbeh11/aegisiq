@@ -64,7 +64,10 @@ async def stream(websocket: WebSocket, token: str | None = Query(default=None)):
         await websocket.close(code=WS_POLICY_VIOLATION, reason="Invalid or missing token")
         return
 
-    await hub.connect(websocket)
+    if not await hub.connect(websocket):
+        # Hub at capacity; it has already closed the socket with 1013.
+        return
+
     try:
         # Replay whatever happened in the last few seconds, so a tab that
         # reconnected after a blip doesn't show a suspicious gap. The

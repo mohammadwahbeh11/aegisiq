@@ -44,6 +44,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.auth.dependencies import require_role
+from app.security.rate_limit import enforce_mutate
 from app.config import get_settings
 from app.models.alert import Alert, AlertStatus, AlertStatusHistory
 from app.models.log import Log, Severity
@@ -115,7 +116,7 @@ def get_retention_config(_user: User = Depends(require_role(UserRole.ADMINISTRAT
     )
 
 
-@router.post("/purge", response_model=PurgeResponse)
+@router.post("/purge", response_model=PurgeResponse, dependencies=[Depends(enforce_mutate)])
 def purge(
     payload: PurgeRequest,
     db: Session = Depends(get_db),

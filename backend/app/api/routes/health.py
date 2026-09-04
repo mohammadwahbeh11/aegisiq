@@ -1,3 +1,5 @@
+from functools import lru_cache
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -16,6 +18,33 @@ def _license_snapshot() -> dict:
     settings = get_settings()
     st = verify_license(settings.PREMIUM_LICENSE_KEY)
     return {"active": st.active, "tier": st.tier, "features": st.features}
+
+@lru_cache(maxsize=1)
+def _sigma_snapshot() -> dict:
+    """Whether the Sigma engine actually has rules, cached for the life of
+    the process.
+
+    This exists because Sigma failing is SILENT: load_rules() returns an
+    empty list for a missing directory, so a container that shipped without
+    sigma_rules/ ran with the whole engine disabled and looked perfectly
+    healthy. That is exactly what happened before the build context was
+    fixed, and nothing outside the container could observe it. Reporting the
+    count makes the regression detectable from /health.
+
+    Cached because /health is polled (Render's health check hits it
+    continuously) and this touches the filesystem. Deliberately reports the
+    COUNT only, never the directory path: /health is unauthenticated.
+    """
+    settings = get_settings()
+    if not settings.SIGMA_ENABLED:
+        return {"enabled": False, "rules_loaded": 0}
+    try:
+        from app.detection.sigma import load_rules
+
+        return {"enabled": True, "rules_loaded": len(load_rules(settings.SIGMA_RULES_DIR))}
+    except Exception as exc:  # noqa: BLE001 - health must never 500
+        return {"enabled": True, "rules_loaded": 0, "error": type(exc).__name__}
+
 
 router = APIRouter(tags=["health"])
 
@@ -82,6 +111,9 @@ def health_check(db: Session = Depends(get_db)):
         },
         # v2.1 — premium license status (Log Analysis Report).
         "license": _license_snapshot(),
+        # v2.3 Sigma engine. rules_loaded == 0 with enabled == true means the
+        # rules directory is missing or empty in this deployment.
+        "sigma": _sigma_snapshot(),
         # Deliberately does NOT call the Wazuh API: /health is polled and
         # must stay fast and dependency-free. Use
         # /api/integrations/wazuh/status for a live check.

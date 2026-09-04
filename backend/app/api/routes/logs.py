@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.auth.dependencies import get_current_user, require_role
+from app.security.rate_limit import enforce_mutate
 from app.ingestion.schemas import LogIngestRequest, LogIngestResponse
 from app.ingestion.service import ingest_log
 from app.models.alert import Alert
@@ -165,7 +166,7 @@ def get_log(log_id: int, db: Session = Depends(get_db), _user=Depends(get_curren
     return LogOut.model_validate(log)
 
 
-@router.delete("/{log_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{log_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(enforce_mutate)])
 def delete_log(
     log_id: int,
     db: Session = Depends(get_db),
@@ -189,7 +190,7 @@ def delete_log(
     return None
 
 
-@router.post("/bulk-delete", status_code=status.HTTP_200_OK)
+@router.post("/bulk-delete", status_code=status.HTTP_200_OK, dependencies=[Depends(enforce_mutate)])
 def bulk_delete_logs(
     payload: dict,
     db: Session = Depends(get_db),

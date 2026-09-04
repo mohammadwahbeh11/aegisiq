@@ -134,3 +134,19 @@ def _identity(request: Request) -> str:
 async def enforce_auth(request: Request) -> None:
     """Dependency alias for the auth-login route."""
     await auth_limiter.check(_identity(request))
+
+
+async def enforce_mutate(request: Request) -> None:
+    """Dependency for DESTRUCTIVE console actions (deletes, bulk deletes,
+    retention purge).
+
+    mutate_limiter was defined here from the start but never attached to a
+    route, so it protected nothing. It is applied only to the destructive
+    endpoints, deliberately NOT to log ingestion: a SIEM's ingest path has
+    to absorb bursts (the Simulation Lab alone posts a dozen events in a
+    couple of seconds, and a real shipper far more), so rate-limiting it
+    would break normal operation to defend against an already-authenticated
+    caller. Mass deletion is the operation where abuse actually destroys
+    evidence, and no legitimate analyst workflow approaches 60/min there.
+    """
+    await mutate_limiter.check(_identity(request))

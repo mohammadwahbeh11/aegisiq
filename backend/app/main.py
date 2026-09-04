@@ -32,6 +32,12 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Before anything can log a request: the live socket authenticates via
+    # ?token=<JWT>, which uvicorn's access logger would otherwise write out
+    # in full. See app/security/log_redaction.py.
+    from app.security.log_redaction import install as install_log_redaction
+    install_log_redaction()
+
     # v2.3 — production security guardrails. In ENV=production, refuse to
     # boot with demo defaults (SECRET_KEY, admin password, missing
     # encryption key, wildcard CORS). A lab tool that ships to a network
