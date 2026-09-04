@@ -21,6 +21,8 @@ set -euo pipefail
 
 SIEM_URL="${SIEM_URL:-https://aegisiq-backend-md69.onrender.com}"
 SIEM_USERNAME="${SIEM_USERNAME:-admin}"
+# Export so the python3 helpers below can read them from os.environ.
+export SIEM_URL SIEM_USERNAME SIEM_PASSWORD
 
 if [[ -z "${SIEM_PASSWORD:-}" ]]; then
   echo "ERROR: set SIEM_PASSWORD first:  export SIEM_PASSWORD='...'" >&2
