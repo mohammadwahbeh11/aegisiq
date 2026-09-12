@@ -4,6 +4,76 @@ All notable changes to this project are documented here. Format is
 loosely based on [Keep a Changelog](https://keepachangelog.com); dates
 are the day the change landed on `main`.
 
+## [2.5.0] — AI Copilot + Threat Intel + Compliance Automation — 2026-09-12
+
+The commercialization release. Turns AegisIQ from "graduation project"
+into a SIEM you can charge for.
+
+### Added — AI Copilot (`app/ai/`)
+
+- **`app/ai/copilot.py`** — `CopilotService` with `explain_alert()` and
+  `triage_batch()` methods. Fail-open: LLM outages return `ai_status:
+  "degraded"` with a rules-based fallback; the SIEM never returns 500
+  because the LLM is down.
+- **`app/ai/providers.py`** — multi-provider abstraction. OpenAI,
+  Anthropic, and local Ollama, all behind one `chat()` interface.
+  Air-gapped SOCs can run llama3.2 locally — data never leaves premises.
+- **`app/ai/prompts.py`** — bilingual (Arabic + English) prompt library.
+  Every prompt teaches the model AegisIQ's schema (severity tiers,
+  MITRE ATT&CK, Kill Chain) explicitly. JSON-mode responses.
+- **`app/api/routes/copilot.py`** — REST endpoints:
+  - `GET /api/copilot/status` — provider health probe (no LLM call)
+  - `POST /api/copilot/explain/{alert_id}` — deep analysis in Arabic or English
+  - `POST /api/copilot/triage` — cluster N alerts into M investigation stories
+- **`docs/AI_COPILOT.md`** — architecture, provider setup, cost model,
+  privacy notes.
+
+### Added — Threat intelligence enrichment (`app/enrichment/`)
+
+- **`app/enrichment/abuseipdb.py`** — AbuseIPDB reputation lookups
+  (free tier: 1000/day).
+- **`app/enrichment/otx.py`** — AlienVault OTX pulse lookups (free, no
+  key).
+- **`app/enrichment/enrichment_service.py`** — composite risk score
+  (70% AbuseIPDB + 30% OTX), 6-hour cache, thread-safe.
+- **`app/api/routes/enrichment.py`** — `GET /api/enrichment/ip/{ip}`.
+
+### Added — Compliance automation (`app/compliance/`)
+
+- **`app/compliance/soc2.py`** — SOC 2 Type I evidence generator for 8
+  Trust Services Criteria (CC6.1-6.6, CC7.1-7.4). Every metric read
+  live from the database — no fabricated data.
+- **`app/compliance/iso27001.py`** — ISO/IEC 27001:2022 Annex A
+  evidence for 8 controls.
+- **`app/compliance/gdpr.py`** — GDPR Article 30 records of processing.
+- **`app/compliance/report.py`** — self-contained HTML renderer. Save
+  to disk, email to your auditor.
+- **`app/api/routes/compliance.py`** — administrator-only endpoints
+  producing JSON or HTML.
+
+### Added — Business layer
+
+- **`marketing/landing.html`** — production-quality landing page with
+  pricing tiers, feature grid, competitive comparison, and CTAs.
+- **`docs/BUSINESS_MODEL.md`** — honest 3-year plan: target market,
+  unit economics, path to $100k ARR, competitive moats, real risks.
+
+### Config additions
+
+- `AI_PROVIDER`, `AI_MODEL`, `AI_TIMEOUT_SECONDS`, `AI_BASE_URL`
+- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OLLAMA_URL`
+- `ABUSEIPDB_API_KEY`
+
+All optional — AegisIQ works exactly as before when they're unset.
+
+### Notes
+
+- 104 backend Python files all compile clean.
+- No breaking changes: existing routes, models, and clients untouched.
+- AI + enrichment + compliance are strictly additive — the SIEM core
+  functions identically without them.
+
+
 ## [2.4.2] — One-click Render.com deployment — 2026-09-03
 
 Adds the free-tier public deploy path so the project can be online in ~15

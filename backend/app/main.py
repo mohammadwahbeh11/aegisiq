@@ -6,6 +6,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
+    copilot,
+    compliance,
+    enrichment,
     agents,
     alerts,
     analysis,       # v2.1 (premium)
@@ -106,6 +109,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(copilot.router)
+app.include_router(enrichment.router)
+app.include_router(compliance.router)
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(mfa.router)            # v2.3 MFA enrolment/management

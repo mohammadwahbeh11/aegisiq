@@ -150,6 +150,23 @@ class Settings(BaseSettings):
     # code is still valid. 1 => ±30 s, the RFC 6238 recommended window.
     MFA_TOTP_WINDOW: int = 1
 
+    # --- v2.5 AI Copilot ---
+    # LLM-augmented alert triage. Provider is one of:
+    #   disabled | openai | anthropic | ollama
+    # See app/ai/providers.py and docs/AI_COPILOT.md.
+    AI_PROVIDER: str = "disabled"
+    AI_MODEL: str = "gpt-4o-mini"
+    AI_TIMEOUT_SECONDS: int = 30
+    AI_BASE_URL: str = "https://api.openai.com/v1"
+    OPENAI_API_KEY: str = ""
+    ANTHROPIC_API_KEY: str = ""
+    OLLAMA_URL: str = "http://localhost:11434"
+
+    # --- v2.5 Threat intelligence enrichment ---
+    # AbuseIPDB free tier: 1000 lookups/day. Register at abuseipdb.com.
+    # AlienVault OTX: free, no key required.
+    ABUSEIPDB_API_KEY: str = ""
+
     # --- SOAR (automated response) ---
     # When enabled, high/critical alerts record a containment action.
     # SOAR_EXECUTE=false means actions are RECORDED but never actually

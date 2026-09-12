@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AegisIQ — AI-augmented SIEM & SOAR for lean security teams</title>
+<meta name="description" content="Modern SIEM with AI copilot, threat intelligence, and one-click compliance reports. Deploy in 15 minutes. Arabic + English native. Free for SMBs, pro for enterprise.">
+<style>
+  :root {
+    --brand: #7c3aed; --brand-2: #ec4899; --brand-3: #f97316;
+    --ink: #0f172a; --mute: #64748b; --line: #e2e8f0; --bg: #ffffff;
+    --hero-grad: linear-gradient(135deg,#7c3aed 0%,#ec4899 50%,#f97316 100%);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", "Inter", Arial, sans-serif;
+         color: var(--ink); line-height: 1.6; background: var(--bg); }
+  a { color: var(--brand); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  header { padding: 20px 40px; display: flex; align-items: center;
+           justify-content: space-between; border-bottom: 1px solid var(--line); }
+  .logo { font-weight: 800; font-size: 1.3rem; background: var(--hero-grad);
+          -webkit-background-clip: text; background-clip: text; color: transparent; }
+  nav a { margin-left: 24px; color: var(--ink); font-weight: 500; }
+
+  .hero { padding: 80px 40px 60px; text-align: center;
+          background: linear-gradient(180deg, rgba(124,58,237,.03), transparent); }
+  .hero h1 { font-size: 3.2rem; line-height: 1.1; margin: 0 0 20px;
+             max-width: 900px; margin-inline: auto; letter-spacing: -0.02em; }
+  .hero h1 .grad { background: var(--hero-grad); -webkit-background-clip: text;
+                   background-clip: text; color: transparent; }
+  .hero p.tagline { font-size: 1.25rem; color: var(--mute); max-width: 700px;
+                    margin: 0 auto 32px; }
+  .cta { display: inline-flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+  .btn { padding: 14px 28px; border-radius: 10px; font-weight: 600;
+         font-size: 1rem; border: none; cursor: pointer; text-decoration: none; }
+  .btn-primary { background: var(--hero-grad); color: white; }
+  .btn-primary:hover { transform: translateY(-1px); text-decoration: none; }
+  .btn-secondary { background: white; color: var(--ink); border: 1.5px solid var(--line); }
+  .badges { margin-top: 30px; font-size: .85rem; color: var(--mute); }
+  .badges span { margin: 0 12px; }
+
+  section { padding: 80px 40px; max-width: 1200px; margin: 0 auto; }
+  section h2 { font-size: 2.2rem; margin: 0 0 12px; letter-spacing: -0.01em; }
+  section > p.sub { color: var(--mute); font-size: 1.1rem; max-width: 640px; margin: 0 0 40px; }
+
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 32px; }
+  @media (max-width: 900px) { .grid-3, .grid-2 { grid-template-columns: 1fr; } }
+
+  .card { padding: 28px; border-radius: 14px; border: 1px solid var(--line);
+          background: white; transition: transform .15s ease, box-shadow .15s ease; }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(0,0,0,.06); }
+  .card .icon { font-size: 2rem; margin-bottom: 12px; }
+  .card h3 { margin: 0 0 8px; font-size: 1.15rem; }
+  .card p { margin: 0; color: var(--mute); }
+
+  .pricing { background: linear-gradient(180deg, #fafbfc, transparent); }
+  .price-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  @media (max-width: 900px) { .price-grid { grid-template-columns: 1fr; } }
+  .price { padding: 36px 32px; border-radius: 16px; border: 1px solid var(--line);
+           background: white; position: relative; }
+  .price.featured { border: 2px solid var(--brand); box-shadow: 0 20px 50px rgba(124,58,237,.15); }
+  .price .flag { position: absolute; top: -14px; right: 24px; background: var(--brand);
+                 color: white; padding: 4px 14px; border-radius: 12px; font-size: .75rem;
+                 font-weight: 700; }
+  .price h3 { margin: 0 0 4px; font-size: 1.4rem; }
+  .price .tier-note { color: var(--mute); font-size: .9rem; margin: 0 0 20px; }
+  .price .amount { font-size: 2.6rem; font-weight: 800; letter-spacing: -0.02em; }
+  .price .amount .unit { font-size: 1rem; color: var(--mute); font-weight: 400; }
+  .price ul { list-style: none; padding: 0; margin: 24px 0; }
+  .price li { padding: 8px 0; padding-left: 26px; position: relative; }
+  .price li::before { content: "✓"; position: absolute; left: 0; color: var(--brand); font-weight: 700; }
+  .price li.dim { color: var(--mute); }
+  .price li.dim::before { content: "—"; color: var(--mute); }
+
+  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px;
+              padding: 60px 40px; background: #0f172a; color: white; }
+  @media (max-width: 900px) { .stat-row { grid-template-columns: repeat(2, 1fr); } }
+  .stat { text-align: center; }
+  .stat .big { font-size: 2.8rem; font-weight: 800; background: var(--hero-grad);
+               -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .stat .small { color: #94a3b8; font-size: .9rem; margin-top: 4px; }
+
+  .compare { margin-top: 40px; overflow-x: auto; }
+  .compare table { width: 100%; border-collapse: collapse; }
+  .compare th, .compare td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--line); }
+  .compare th { background: #f5f2ff; color: var(--brand); font-weight: 600; }
+  .compare td.check { color: #059669; font-weight: 600; }
+  .compare td.miss { color: #94a3b8; }
+  .compare td:first-child { font-weight: 500; }
+
+  footer { padding: 40px; background: #0f172a; color: #94a3b8; text-align: center; }
+  footer .logo { margin-bottom: 12px; }
+  footer a { color: #cbd5e1; margin: 0 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">✦ AegisIQ</div>
+  <nav>
+    <a href="#features">Features</a>
+    <a href="#pricing">Pricing</a>
+    <a href="#compare">Compare</a>
+    <a href="https://github.com/mohammadwahbeh11/aegisiq" target="_blank">GitHub</a>
+    <a href="#contact" class="btn btn-primary" style="padding:8px 18px;font-size:.9rem;">Get started</a>
+  </nav>
+</header>
+
+<section class="hero">
+  <h1>The SIEM your <span class="grad">two-person</span> security team<br>actually gets to use.</h1>
+  <p class="tagline">
+    AI-augmented alert triage. Compliance reports in one click. Native Arabic + English.
+    Deployed in 15 minutes. Free for SMBs, honest pricing for the rest.
+  </p>
+  <div class="cta">
+    <a href="#pricing" class="btn btn-primary">Start free</a>
+    <a href="https://github.com/mohammadwahbeh11/aegisiq" class="btn btn-secondary" target="_blank">
+      ⭐ Open source · view on GitHub
+    </a>
+  </div>
+  <div class="badges">
+    <span>🔒 SOC 2 evidence generator</span>
+    <span>🇸🇦 Native Arabic UI</span>
+    <span>⚡ 15-min deploy</span>
+    <span>📜 MIT license</span>
+  </div>
+</section>
+
+<div class="stat-row">
+  <div class="stat"><div class="big">10×</div><div class="small">fewer alerts to read (AI triage)</div></div>
+  <div class="stat"><div class="big">15 min</div><div class="small">from git-clone to first alert</div></div>
+  <div class="stat"><div class="big">$0</div><div class="small">starting price for SMBs</div></div>
+  <div class="stat"><div class="big">8</div><div class="small">defense layers built-in</div></div>
+</div>
+
+<section id="features">
+  <h2>Built for teams too small to hire a SOC.</h2>
+  <p class="sub">
+    Enterprise SIEM assumes a 10-person team drowning in dashboards. AegisIQ assumes you.
+  </p>
+
+  <div class="grid-3">
+    <div class="card">
+      <div class="icon">🤖</div>
+      <h3>AI Copilot</h3>
+      <p>Every alert gets a plain-language explanation. 30 alerts cluster into 3 investigation stories. Works with OpenAI, Anthropic, or a local Ollama for air-gapped deployments.</p>
+    </div>
+    <div class="card">
+      <div class="icon">🌍</div>
+      <h3>Threat intelligence, free</h3>
+      <p>Every IP enriched with AbuseIPDB reputation + AlienVault OTX pulses. Cached 6 hours. "203.0.113.42 is a known Tor exit node from the Hydra brute-force pulse."</p>
+    </div>
+    <div class="card">
+      <div class="icon">📜</div>
+      <h3>One-click compliance</h3>
+      <p>SOC 2, ISO 27001, GDPR evidence reports generated from real audit data — not templates. HTML ready to email your auditor.</p>
+    </div>
+    <div class="card">
+      <div class="icon">🎯</div>
+      <h3>8 detection rules + Sigma</h3>
+      <p>Brute force, credential stuffing, port scan, privilege escalation, file integrity, web attack, and more. Every alert tagged with MITRE ATT&CK + Cyber Kill Chain.</p>
+    </div>
+    <div class="card">
+      <div class="icon">🛡️</div>
+      <h3>Kill Switch</h3>
+      <p>One click to block an attacker's IP on the endpoint via HMAC-signed webhook. Time-to-containment: under one second.</p>
+    </div>
+    <div class="card">
+      <div class="icon">🌐</div>
+      <h3>Arabic-native</h3>
+      <p>Full RTL UI. AI explanations in Arabic. The Middle East's first SIEM built for regional SOCs. No translation-shop compromises.</p>
+    </div>
+  </div>
+</section>
+
+<section id="compare">
+  <h2>How AegisIQ compares.</h2>
+  <p class="sub">
+    Honest table — not marketing fluff. Prices are September 2026 public list.
+  </p>
+  <div class="compare">
+    <table>
+      <thead><tr>
+        <th>Capability</th>
+        <th>AegisIQ</th>
+        <th>Splunk Cloud</th>
+        <th>Wazuh (open source)</th>
+        <th>Microsoft Sentinel</th>
+      </tr></thead>
+      <tbody>
+        <tr><td>Starting price</td>
+          <td class="check">Free</td>
+          <td>~$150/GB/day</td>
+          <td>Free</td>
+          <td>$2.46/GB ingested</td></tr>
+        <tr><td>Deploy time (first alert)</td>
+          <td class="check">15 min</td>
+          <td>hours</td>
+          <td>hours</td>
+          <td>hours</td></tr>
+        <tr><td>AI alert triage</td>
+          <td class="check">Built-in</td>
+          <td>Add-on ($$)</td>
+          <td class="miss">—</td>
+          <td>Copilot ($$)</td></tr>
+        <tr><td>Native Arabic UI</td>
+          <td class="check">Yes</td>
+          <td class="miss">No</td>
+          <td class="miss">No</td>
+          <td class="miss">No</td></tr>
+        <tr><td>Compliance reports (SOC 2 / ISO 27001)</td>
+          <td class="check">1-click, free</td>
+          <td>Add-on</td>
+          <td class="miss">Manual</td>
+          <td>Workbook</td></tr>
+        <tr><td>Local LLM (data stays on-prem)</td>
+          <td class="check">Yes (Ollama)</td>
+          <td class="miss">No</td>
+          <td class="miss">No</td>
+          <td class="miss">No</td></tr>
+        <tr><td>Kill Switch (auto endpoint block)</td>
+          <td class="check">Yes</td>
+          <td>SOAR add-on</td>
+          <td class="miss">Manual</td>
+          <td>Playbooks ($$)</td></tr>
+        <tr><td>Open source</td>
+          <td class="check">MIT license</td>
+          <td class="miss">Proprietary</td>
+          <td class="check">GPL</td>
+          <td class="miss">Proprietary</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="pricing" class="pricing">
+  <h2>Honest pricing.</h2>
+  <p class="sub">No per-GB metering. No 12-month contracts. Cancel anytime. SMB tier is genuinely free — forever.</p>
+
+  <div class="price-grid">
+    <div class="price">
+      <h3>Community</h3>
+      <p class="tier-note">Self-hosted, MIT license</p>
+      <div class="amount">$0<span class="unit"> forever</span></div>
+      <ul>
+        <li>All 8 detection rules</li>
+        <li>Full SIEM + SOAR + audit</li>
+        <li>SOC 2 / ISO 27001 / GDPR reports</li>
+        <li>Kill Switch endpoint agent</li>
+        <li>Bring your own AI key</li>
+        <li class="dim">Community support (GitHub)</li>
+      </ul>
+      <a href="https://github.com/mohammadwahbeh11/aegisiq" class="btn btn-secondary" style="width:100%;text-align:center;display:block;box-sizing:border-box;">Deploy free</a>
+    </div>
+
+    <div class="price featured">
+      <div class="flag">MOST POPULAR</div>
+      <h3>Pro</h3>
+      <p class="tier-note">Managed cloud, per SOC analyst seat</p>
+      <div class="amount">$49<span class="unit"> / analyst / month</span></div>
+      <ul>
+        <li>Everything in Community</li>
+        <li>AI Copilot included (no bring-your-own-key)</li>
+        <li>Managed threat intel feeds</li>
+        <li>99.9% uptime SLA</li>
+        <li>Priority email + Slack support</li>
+        <li>Auto-updates + backup</li>
+      </ul>
+      <a href="#contact" class="btn btn-primary" style="width:100%;text-align:center;display:block;box-sizing:border-box;">Start 14-day trial</a>
+    </div>
+
+    <div class="price">
+      <h3>Enterprise</h3>
+      <p class="tier-note">On-prem or private cloud</p>
+      <div class="amount">Custom</div>
+      <ul>
+        <li>Everything in Pro</li>
+        <li>Air-gapped Ollama deployment</li>
+        <li>SSO (SAML, OIDC)</li>
+        <li>Dedicated success engineer</li>
+        <li>Custom Sigma rule development</li>
+        <li>24/7 phone support</li>
+      </ul>
+      <a href="#contact" class="btn btn-secondary" style="width:100%;text-align:center;display:block;box-sizing:border-box;">Talk to sales</a>
+    </div>
+  </div>
+</section>
+
+<section id="contact">
+  <h2>Ready when you are.</h2>
+  <p class="sub">Two-line email — I reply within 12 hours. First customers get a co-founder relationship, not a support ticket.</p>
+  <p style="font-size:1.1rem;">
+    <strong>Email:</strong> <a href="mailto:mmolben1@gmail.com">mmolben1@gmail.com</a><br>
+    <strong>GitHub:</strong> <a href="https://github.com/mohammadwahbeh11/aegisiq">github.com/mohammadwahbeh11/aegisiq</a>
+  </p>
+</section>
+
+<footer>
+  <div class="logo">✦ AegisIQ</div>
+  <p>Built by Mohammad Wahbeh · MIT license · Amman, Jordan</p>
+  <p style="margin-top:12px;">
+    <a href="#features">Features</a> ·
+    <a href="#pricing">Pricing</a> ·
+    <a href="https://github.com/mohammadwahbeh11/aegisiq">GitHub</a> ·
+    <a href="mailto:mmolben1@gmail.com">Contact</a>
+  </p>
+  <p style="font-size:.75rem;margin-top:20px;color:#64748b;">
+    © 2026 · SIEM & SOAR for lean security teams.
+  </p>
+</footer>
+
+</body>
+</html>
