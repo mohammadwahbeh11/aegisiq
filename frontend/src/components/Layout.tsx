@@ -44,6 +44,7 @@ const NAV_SECTIONS: NavSection[] = [
     accent: "pro",
     items: [
       { to: "/analysis",  label: "Log analysis",      glyph: "◐", pro: true },
+      { to: "/intelligence", label: "Intelligence",     glyph: "*", pro: true },
     ],
   },
   {

@@ -16,6 +16,7 @@ import Retention from "./pages/Retention";
 import Rules from "./pages/Rules";
 import Security from "./pages/Security";          // v2.3 MFA
 import Simulation from "./pages/Simulation";
+import Intelligence from "./pages/Intelligence";
 
 /**
  * The LiveProvider wraps the whole authenticated area rather than any
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="/analysis" element={<Analysis />} /> {/* v2.1 premium */}
         <Route path="/security" element={<Security />} /> {/* v2.3 MFA */}
         <Route path="/simulation" element={<Simulation />} />
+        <Route path="/intelligence" element={<Intelligence />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
