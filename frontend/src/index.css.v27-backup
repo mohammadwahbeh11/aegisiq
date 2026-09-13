@@ -3795,7 +3795,3 @@ a:focus:not(:focus-visible) {
   .panel { border: 1px solid #ccc !important; box-shadow: none !important; break-inside: avoid; }
 }
 
-
-
-/* === v2.8 imported from styles/aegisiq_design_v2.css === */
-@import './styles/aegisiq_design_v2.css';

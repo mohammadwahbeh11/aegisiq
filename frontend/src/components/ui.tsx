@@ -1,16 +1,25 @@
+/**
+ * Shared UI primitives — v2.8 refresh.
+ *
+ * Kept in one file so a designer working on look-and-feel touches one
+ * module. Every component here consumes the v2.8 design tokens
+ * (var(--...)) so a re-theme is a token swap, not a component rewrite.
+ *
+ * Backwards compatible with earlier pages that imported EmptyState /
+ * Loading / Panel / ErrorBanner / SeverityBadge / StatusBadge from ui.
+ */
 import { ReactNode } from "react";
 
-import { AlertStatus, Severity } from "../api/client";
+// -- Types --------------------------------------------------------------
+type Severity = "low" | "medium" | "high" | "critical";
+type AlertStatus = "new" | "investigating" | "resolved" | "false_positive";
 
-/** Small presentational pieces shared by every page. Kept in one file
- *  because each is a handful of lines -- one file per badge would be
- *  more folders to navigate, not more clarity. */
-
+// -- Panel --------------------------------------------------------------
 export function Panel({
   title,
   actions,
   children,
-  className,
+  className = "",
 }: {
   title?: ReactNode;
   actions?: ReactNode;
@@ -18,11 +27,11 @@ export function Panel({
   className?: string;
 }) {
   return (
-    <section className={`panel ${className ?? ""}`}>
+    <section className={`panel ${className}`}>
       {(title || actions) && (
         <header className="panel-header">
-          {title && <h3>{title}</h3>}
-          {actions && <div className="panel-actions">{actions}</div>}
+          {typeof title === "string" ? <h2>{title}</h2> : title}
+          {actions}
         </header>
       )}
       {children}
@@ -30,75 +39,110 @@ export function Panel({
   );
 }
 
-export function SeverityBadge({ severity }: { severity: Severity }) {
-  return <span className={`badge severity-${severity}`}>{severity}</span>;
-}
-
-const STATUS_LABELS: Record<AlertStatus, string> = {
-  new: "New",
-  investigating: "Investigating",
-  resolved: "Resolved",
-  false_positive: "False positive",
-};
-
-export function StatusBadge({ status }: { status: AlertStatus }) {
-  return <span className={`badge status-${status}`}>{STATUS_LABELS[status]}</span>;
-}
-
-export function MitreBadge({ id }: { id: string | null }) {
-  if (!id) return <span className="muted">—</span>;
-  return <span className="badge mitre">{id}</span>;
-}
-
-export function EmptyState({ children }: { children: ReactNode }) {
-  return <div className="empty-state">{children}</div>;
-}
-
-export function Loading({ label = "Loading…" }: { label?: string }) {
+// -- Empty state --------------------------------------------------------
+export function EmptyState({
+  icon = "📭",
+  title,
+  children,
+}: {
+  icon?: ReactNode;
+  title?: ReactNode;
+  children?: ReactNode;
+}) {
   return (
-    <div className="loading-state">
-      <span className="spinner" aria-hidden="true" />
-      {label}
+    <div className="empty-state">
+      <div className="icon" aria-hidden>{icon}</div>
+      {title && <div style={{ fontWeight: 600, marginBottom: 4 }}>{title}</div>}
+      {children && <div style={{ fontSize: 13 }}>{children}</div>}
     </div>
   );
 }
 
+// -- Loading ------------------------------------------------------------
+export function Loading({ label = "Loading…" }: { label?: string }) {
+  return <div className="loading" role="status" aria-live="polite">{label}</div>;
+}
+
+// -- Skeleton -----------------------------------------------------------
+export function Skeleton({
+  height = 16,
+  width = "100%",
+  count = 1,
+  gap = 6,
+}: {
+  height?: number | string;
+  width?: number | string;
+  count?: number;
+  gap?: number;
+}) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <div
+          key={i}
+          className="skeleton"
+          style={{
+            height: typeof height === "number" ? `${height}px` : height,
+            width:  typeof width  === "number" ? `${width}px`  : width,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// -- Error banner -------------------------------------------------------
 export function ErrorBanner({ children }: { children: ReactNode }) {
-  return <div className="error-banner">{children}</div>;
+  return <div className="error-banner" role="alert">{children}</div>;
 }
 
-/**
- * Timestamps arrive from the API as naive UTC ISO strings (the backend
- * stores UTC). Appending "Z" when there is no explicit offset is what
- * stops the browser from re-interpreting them as local time and showing
- * events three hours in the future.
- */
-export function parseUtc(value: string | null | undefined): Date | null {
-  if (!value) return null;
-  const normalized = /([zZ]|[+-]\d{2}:?\d{2})$/.test(value) ? value : `${value}Z`;
-  const parsed = new Date(normalized);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+// -- Severity badge -----------------------------------------------------
+export function SeverityBadge({ severity }: { severity: Severity }) {
+  return <span className={`severity-badge severity-${severity}`}>{severity}</span>;
 }
 
-export function formatTime(value: string | null | undefined): string {
-  const date = parseUtc(value);
-  return date ? date.toLocaleTimeString() : "—";
+// -- Status badge -------------------------------------------------------
+export function StatusBadge({ status }: { status: AlertStatus }) {
+  const label = status === "false_positive" ? "false positive" : status;
+  return <span className={`status-badge status-${status}`}>{label}</span>;
 }
 
-export function formatDateTime(value: string | null | undefined): string {
-  const date = parseUtc(value);
-  return date ? date.toLocaleString() : "—";
+// -- MITRE badge --------------------------------------------------------
+export function MitreBadge({ id }: { id: string | null }) {
+  if (!id) return null;
+  return (
+    <a
+      href={`https://attack.mitre.org/techniques/${id.replace(".", "/")}/`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="chip"
+      style={{ textDecoration: "none" }}
+    >
+      {id}
+    </a>
+  );
 }
 
-export function formatRelative(value: string | null | undefined): string {
-  const date = parseUtc(value);
-  if (!date) return "—";
-  const seconds = Math.round((Date.now() - date.getTime()) / 1000);
-  if (seconds < 5) return "just now";
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+// -- Time helpers -------------------------------------------------------
+export function parseUtc(v: string | null | undefined): Date | null {
+  if (!v) return null;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
+export function formatTime(v: string | null | undefined): string {
+  const d = parseUtc(v);
+  return d ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "—";
+}
+export function formatDateTime(v: string | null | undefined): string {
+  const d = parseUtc(v);
+  return d ? d.toLocaleString() : "—";
+}
+export function formatRelative(v: string | null | undefined): string {
+  const d = parseUtc(v);
+  if (!d) return "—";
+  const s = Math.round((Date.now() - d.getTime()) / 1000);
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.round(s / 60)}m ago`;
+  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+  return `${Math.round(s / 86400)}d ago`;
 }

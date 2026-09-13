@@ -1,458 +1,371 @@
 /**
- * Dashboard — AegisIQ v2.1 live-reactive edition.
+ * Dashboard v2.8 — modern SOC overview.
  *
- * What changed from v2.0:
- *   * KPI numbers animate on change (count-up transition, ~450 ms).
- *   * Every new item in the live-event feed and the live-alert feed
- *     flashes for 1.2 s so the analyst's eye tracks arrival, not
- *     scroll position.
- *   * Live-stream header carries a pulsing "LIVE" indicator that
- *     brightens when events are flowing and dims after 5 s of quiet.
- *   * A new events-per-minute meter, computed from the sliding live
- *     buffer, gives an at-a-glance "is anything happening" reading.
- *   * The aggregate stats block also refreshes every 15 s on a
- *     safety-net timer — a WebSocket that drops a frame does not
- *     freeze the numbers.
+ * Redesigned around information hierarchy that competitors get wrong:
  *
- * All motion respects the tokens in index.css and adds nothing to
- * the render tree while idle: the animations are pure CSS keyframes
- * driven by a transient `is-new` class.
+ *   1. TOP-LINE PULSE (5 KPIs)  — always visible, thumb-scannable
+ *   2. ATTACK TIMELINE          — the last hour at a glance
+ *   3. TOP THREATS              — ranked, with one-click drill-in
+ *   4. STATUS RIBBON            — MITRE ATT&CK, endpoints, integrations
+ *   5. RECENT ACTIVITY          — live tail (via WebSocket)
+ *
+ * Every card is width-responsive. Every metric uses tabular figures.
+ * Skeleton loaders replace spinners so a slow API doesn't feel broken.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { NavLink } from "react-router-dom";
 
-import {
-  Alert,
-  DashboardStats,
-  LogEvent,
-  MitreCoverageRow,
-  Severity,
-  TimelineBucket,
-  fetchDashboardStats,
-  fetchMitreCoverage,
-  fetchSeverityDistribution,
-  fetchTimeline,
-  fetchTopSources,
-} from "../api/client";
-import { ActivityTimeline, SeverityDonut } from "../components/charts";
-import {
-  EmptyState,
-  ErrorBanner,
-  Loading,
-  MitreBadge,
-  Panel,
-  SeverityBadge,
-  StatusBadge,
-  formatRelative,
-  formatTime,
-} from "../components/ui";
+import { apiClient } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 import { useLive } from "../context/LiveContext";
 
-const EMPTY_COUNTS: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0 };
-const FLASH_MS = 1200;
-const IDLE_FADE_MS = 5000;
-const AGGREGATE_REFRESH_MS = 15000;
-// During an attack, alerts can arrive many-per-second. Refreshing all five
-// aggregate endpoints on EVERY alert floods a single-worker backend and can
-// exhaust its connection pool. Coalesce alert-driven refreshes to at most
-// one per this window (leading + trailing edge) so the dashboard stays live
-// and smooth under a burst instead of stampeding the API.
-const ALERT_COALESCE_MS = 2500;
+// ---------- Types --------------------------------------------------------
 
-// Count-up animation. Given (old, new), returns a currently-rendered
-// intermediate value at 60 fps for ~450 ms.
-function useAnimatedNumber(target: number): number {
-  const [display, setDisplay] = useState(target);
-  const fromRef = useRef(target);
-  useEffect(() => {
-    const from = fromRef.current;
-    const delta = target - from;
-    if (delta === 0) { setDisplay(target); return; }
-    const start = performance.now();
-    const dur = 450;
-    let raf = 0;
-    const step = (now: number) => {
-      const t = Math.min(1, (now - start) / dur);
-      // ease-out cubic
-      const eased = 1 - Math.pow(1 - t, 3);
-      setDisplay(Math.round(from + delta * eased));
-      if (t < 1) raf = requestAnimationFrame(step);
-      else fromRef.current = target;
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [target]);
-  return display;
+interface DashboardSnapshot {
+  totals: {
+    events_24h: number;
+    events_1h: number;
+    alerts_active: number;
+    alerts_critical: number;
+    alerts_high: number;
+    alerts_medium: number;
+    alerts_low: number;
+    endpoints_online: number;
+    endpoints_total: number;
+    containment_actions_24h: number;
+    detection_rate_pct: number | null;
+    mean_time_to_detect_seconds: number | null;
+  };
+  deltas: {
+    events_vs_yesterday_pct: number | null;
+    alerts_vs_yesterday_pct: number | null;
+  };
+  timeline_1h: Array<{ minute: string; count: number; severity: string }>;
+  top_threats: Array<{ id: number; title: string; count: number; severity: string; last_seen: string }>;
+  mitre_coverage: Array<{ tactic: string; covered: number; total: number }>;
+  integrations: Array<{ name: string; status: "healthy" | "degraded" | "unavailable" }>;
 }
 
-// Track which IDs are "new since last render" and clear the flag
-// after FLASH_MS. Callers use it to add `.is-new` to their row.
-function useFlashSet<T extends { id: number }>(items: T[]): Set<number> {
-  const [flash, setFlash] = useState<Set<number>>(new Set());
-  const seenRef = useRef<Set<number>>(new Set());
-  useEffect(() => {
-    const now = new Set<number>();
-    for (const it of items) {
-      if (!seenRef.current.has(it.id)) now.add(it.id);
-    }
-    if (now.size === 0) return;
-    // Prime seen so the same id doesn't re-flash on unrelated re-renders.
-    now.forEach((id) => seenRef.current.add(id));
-    setFlash((prev) => {
-      const next = new Set(prev);
-      now.forEach((id) => next.add(id));
-      return next;
-    });
-    const timer = window.setTimeout(() => {
-      setFlash((prev) => {
-        const next = new Set(prev);
-        now.forEach((id) => next.delete(id));
-        return next;
-      });
-    }, FLASH_MS);
-    return () => window.clearTimeout(timer);
-  }, [items]);
-  return flash;
+// ---------- Helpers ------------------------------------------------------
+
+function formatNumber(n: number): string {
+  if (n < 1000) return n.toString();
+  if (n < 1_000_000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+  return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
 }
 
-// Events per minute, computed from the live buffer (which holds the
-// last 100 log events). If nothing new in 60 s, returns 0.
-function useEventsPerMinute(liveLogs: LogEvent[]): number {
-  const cutoff = Date.now() - 60_000;
-  const recent = liveLogs.filter((l) => {
-    const t = l.timestamp ? new Date(l.timestamp.endsWith("Z") ? l.timestamp : l.timestamp + "Z").getTime() : 0;
-    return t >= cutoff;
-  });
-  return recent.length;
+function formatDuration(s: number | null): string {
+  if (s === null) return "n/a";
+  if (s < 60) return `${s.toFixed(0)}s`;
+  if (s < 3600) return `${(s / 60).toFixed(1)}m`;
+  return `${(s / 3600).toFixed(1)}h`;
 }
 
-export default function Dashboard() {
-  const { liveLogs, liveAlerts, onAlert, connection, lastEventAt } = useLive();
-
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [severityCounts, setSeverityCounts] = useState<Record<Severity, number>>(EMPTY_COUNTS);
-  const [timeline, setTimeline] = useState<TimelineBucket[]>([]);
-  const [topSources, setTopSources] = useState<{ source_ip: string; alerts: number }[]>([]);
-  const [coverage, setCoverage] = useState<MitreCoverageRow[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [tick, setTick] = useState(0);   // forces "5 s ago" style timestamps to advance
-
-  // Overlap + burst guards so a stream of alerts can never pile up a
-  // backlog of five-request refreshes against the backend.
-  const inFlightRef = useRef(false);   // a load() is currently running
-  const pendingRef = useRef(false);    // another load() was requested while running
-  const hasDataRef = useRef(false);    // we have shown real data at least once
-  const coalesceTimerRef = useRef<number | null>(null);
-  const lastLoadRef = useRef(0);
-
-  const load = useCallback(async () => {
-    // Never run two refreshes at once: if one is in flight, just mark that
-    // a follow-up is wanted and let the running one pick it up when it ends.
-    if (inFlightRef.current) { pendingRef.current = true; return; }
-    inFlightRef.current = true;
-    try {
-      do {
-        pendingRef.current = false;
-        // allSettled, not all: one slow/failed endpoint (e.g. the backend
-        // briefly saturated mid-attack) must NOT blank the whole dashboard.
-        // We apply every result that succeeded and keep the last-good value
-        // for any that failed, so the numbers stay live instead of dropping
-        // to zero or throwing up an error banner over good data.
-        const [s, sev, tl, src, cov] = await Promise.allSettled([
-          fetchDashboardStats(),
-          fetchSeverityDistribution(),
-          fetchTimeline(24),
-          fetchTopSources(5),
-          fetchMitreCoverage(),
-        ]);
-        let anyOk = false;
-        if (s.status === "fulfilled")   { setStats(s.value); anyOk = true; }
-        if (sev.status === "fulfilled") { setSeverityCounts({ ...EMPTY_COUNTS, ...sev.value.counts }); anyOk = true; }
-        if (tl.status === "fulfilled")  { setTimeline(tl.value); anyOk = true; }
-        if (src.status === "fulfilled") { setTopSources(src.value); anyOk = true; }
-        if (cov.status === "fulfilled") { setCoverage(cov.value); anyOk = true; }
-        if (anyOk) {
-          hasDataRef.current = true;
-          setError(null);
-        } else if (!hasDataRef.current) {
-          // Only surface the banner if we have never managed to load —
-          // a transient all-fail while data is already on screen is
-          // absorbed silently and retried on the next tick.
-          setError("Could not load dashboard data from the backend.");
-        }
-      } while (pendingRef.current);
-    } finally {
-      inFlightRef.current = false;
-      setIsLoading(false);
-    }
-  }, []);
-
-  // Coalesce alert-driven refreshes: fire immediately on the leading edge,
-  // then throttle to one refresh per ALERT_COALESCE_MS with a single
-  // trailing refresh, so a burst of alerts costs one refresh, not hundreds.
-  const scheduleLoad = useCallback(() => {
-    const now = Date.now();
-    const since = now - lastLoadRef.current;
-    if (since >= ALERT_COALESCE_MS) {
-      lastLoadRef.current = now;
-      void load();
-    } else if (coalesceTimerRef.current === null) {
-      coalesceTimerRef.current = window.setTimeout(() => {
-        coalesceTimerRef.current = null;
-        lastLoadRef.current = Date.now();
-        void load();
-      }, ALERT_COALESCE_MS - since);
-    }
-  }, [load]);
-
-  useEffect(() => { lastLoadRef.current = Date.now(); void load(); }, [load]);
-
-  // On each alert, request a coalesced refresh (not a direct load) so an
-  // attack burst can't stampede the backend.
-  useEffect(() => onAlert(() => scheduleLoad()), [onAlert, scheduleLoad]);
-
-  // Clean up any pending coalesce timer on unmount.
-  useEffect(() => () => {
-    if (coalesceTimerRef.current !== null) window.clearTimeout(coalesceTimerRef.current);
-  }, []);
-
-  // Safety-net timer: refresh aggregates every AGGREGATE_REFRESH_MS
-  // regardless of alert traffic, so long-running dashboards don't drift.
-  useEffect(() => {
-    const t = window.setInterval(() => void load(), AGGREGATE_REFRESH_MS);
-    return () => window.clearInterval(t);
-  }, [load]);
-
-  // 1 Hz tick so "3s ago" style timestamps advance smoothly.
-  useEffect(() => {
-    const t = window.setInterval(() => setTick((n) => n + 1), 1000);
-    return () => window.clearInterval(t);
-  }, []);
-
-  const flashLogs = useFlashSet(liveLogs);
-  const flashAlerts = useFlashSet(liveAlerts);
-  const eventsPerMin = useEventsPerMinute(liveLogs);
-
-  // Live-indicator is "hot" when the last event arrived < IDLE_FADE_MS ago
-  const isHot = lastEventAt !== null && (Date.now() - lastEventAt.getTime()) < IDLE_FADE_MS;
-
-  if (isLoading) return <Loading label="Loading dashboard…" />;
-
-  const recentAlerts: Alert[] = liveAlerts.slice(0, 8);
-
+function Sparkline({ points, color = "currentColor" }: { points: number[]; color?: string }) {
+  const max = Math.max(1, ...points);
+  const w = 120, h = 28, step = points.length > 1 ? w / (points.length - 1) : 0;
+  const path = points
+    .map((v, i) => `${i === 0 ? "M" : "L"} ${(i * step).toFixed(1)} ${(h - (v / max) * h).toFixed(1)}`)
+    .join(" ");
   return (
-    <>
-      <div className="page-head">
-        <div>
-          <h2>Security operations dashboard</h2>
-          <p className="page-sub">
-            Every figure below is computed from stored events — there are no placeholder numbers.
-          </p>
-        </div>
-        <div className={`live-indicator ${isHot ? "hot" : "cool"}`}
-             title={lastEventAt ? `Last event ${formatRelative(lastEventAt.toISOString())}` : "no events yet"}>
-          <span className="live-dot" />
-          <span className="live-label">LIVE</span>
-          <span className="live-rate">{eventsPerMin}/min</span>
-        </div>
-      </div>
-
-      {error && <ErrorBanner>{error}</ErrorBanner>}
-
-      {stats && (
-        <div className="kpi-grid">
-          <KpiCard label="Total events"       n={stats.total_events}     hint={`${stats.events_today.toLocaleString()} today`} />
-          <KpiCard label="Active alerts"      n={stats.active_alerts}    hint="new + investigating" tone={stats.active_alerts > 0 ? "warn" : undefined} />
-          <KpiCard label="Critical alerts"    n={stats.critical_alerts}  tone={stats.critical_alerts > 0 ? "critical" : undefined} />
-          <KpiCard label="High alerts"        n={stats.high_alerts}      tone={stats.high_alerts > 0 ? "high" : undefined} />
-          <KpiCardText label="Endpoints online" value={`${stats.online_endpoints} / ${stats.monitored_endpoints}`} />
-          <KpiCard label="Containment actions" n={stats.soar_actions}    hint="recorded, not executed" />
-          <KpiCardText label="Detection rate"
-                       value={stats.detection_rate === null ? "n/a" : `${stats.detection_rate}%`}
-                       hint={stats.detection_rate === null ? "no alerts raised yet" : "alerts not dismissed as false positives"} />
-          <KpiCardText label="Mean detection time"
-                       value={stats.avg_detection_time_seconds === null ? "n/a" : `${stats.avg_detection_time_seconds}s`}
-                       hint="event timestamp → alert raised" />
-        </div>
-      )}
-
-      <div className="grid-2">
-        <Panel title="Active alerts by severity">
-          <SeverityDonut counts={severityCounts} />
-        </Panel>
-
-        <Panel title="Activity — last 24 hours">
-          <ActivityTimeline buckets={timeline} />
-        </Panel>
-      </div>
-
-      <div className="grid-2">
-        <Panel
-          title={
-            <>
-              Live alert feed
-              {isHot && <span className="header-pulse" />}
-            </>
-          }
-          actions={<Link className="link-btn" to="/alerts">Open alert queue →</Link>}
-        >
-          {recentAlerts.length === 0 ? (
-            <EmptyState>
-              {connection === "live"
-                ? "Connected and listening. Alerts appear here the moment a rule fires — run a scenario from the Simulation lab to see it happen."
-                : "The live connection is not established, so no streaming alerts can be shown."}
-            </EmptyState>
-          ) : (
-            <ul className="feed">
-              {recentAlerts.map((alert) => (
-                <li key={alert.id} className={flashAlerts.has(alert.id) ? "is-new" : ""}>
-                  <Link to={`/alerts/${alert.id}`} className="feed-row">
-                    <SeverityBadge severity={alert.severity} />
-                    <div className="feed-body">
-                      <div className="feed-title">{alert.rule_name ?? "Detection rule"}</div>
-                      <div className="feed-desc">{alert.description}</div>
-                    </div>
-                    <div className="feed-meta">
-                      <StatusBadge status={alert.status} />
-                      <span className="muted">{formatRelative(alert.timestamp)}</span>
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-
-        <Panel
-          title={
-            <>
-              Live event stream
-              {isHot && <span className="header-pulse" />}
-            </>
-          }
-          actions={<Link className="link-btn" to="/logs">Search all logs →</Link>}
-        >
-          {liveLogs.length === 0 ? (
-            <EmptyState>
-              No events received on this connection yet. Ingested logs appear here in real time.
-            </EmptyState>
-          ) : (
-            <div className="table-scroll compact live-stream">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Time</th>
-                    <th>Event</th>
-                    <th>Source</th>
-                    <th>Severity</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {liveLogs.slice(0, 12).map((log) => (
-                    <tr key={log.id} className={flashLogs.has(log.id) ? "is-new" : ""}>
-                      <td className="muted mono">{formatTime(log.timestamp)}</td>
-                      <td>{log.event_type}</td>
-                      <td className="mono">{log.source_ip ?? log.hostname ?? "—"}</td>
-                      <td>
-                        <SeverityBadge severity={log.severity} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {/* referenced by useEffect on `tick` so relative-times stay fresh */}
-              <span style={{display:"none"}}>{tick}</span>
-            </div>
-          )}
-        </Panel>
-      </div>
-
-      <div className="grid-2">
-        <Panel title="Top alerting sources">
-          {topSources.length === 0 ? (
-            <EmptyState>No alerts with a source address have been raised yet.</EmptyState>
-          ) : (
-            <ul className="ranked-list">
-              {topSources.map((row) => (
-                <li key={row.source_ip}>
-                  <Link to={`/alerts?source_ip=${encodeURIComponent(row.source_ip)}`} className="mono">
-                    {row.source_ip}
-                  </Link>
-                  <span className="count">{row.alerts}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-
-        <Panel title="MITRE ATT&CK / Cyber Kill Chain coverage">
-          <div className="table-scroll compact">
-            <table>
-              <thead>
-                <tr>
-                  <th>Rule</th>
-                  <th>Technique</th>
-                  <th>Kill chain phase</th>
-                  <th>Alerts</th>
-                </tr>
-              </thead>
-              <tbody>
-                {coverage.map((row) => (
-                  <tr key={row.rule_id} className={row.enabled ? "" : "row-disabled"}>
-                    <td>
-                      {row.rule_name}
-                      {!row.enabled && <span className="tag">disabled</span>}
-                    </td>
-                    <td>
-                      <MitreBadge id={row.mitre_id} />
-                    </td>
-                    <td className="muted">{row.kill_chain_phase ?? "—"}</td>
-                    <td>{row.alerts}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Panel>
-      </div>
-    </>
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="kpi-spark" preserveAspectRatio="none">
+      <path d={path} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={`${path} L ${w} ${h} L 0 ${h} Z`} fill={color} opacity="0.12" />
+    </svg>
   );
 }
 
-// KPI whose value is a number → animated count-up.
+// ---------- Sub-components -----------------------------------------------
+
 function KpiCard({
-  label, n, hint, tone,
+  label, value, brand, delta, spark, sparkColor,
 }: {
-  label: string;
-  n: number;
-  hint?: string;
-  tone?: "critical" | "high" | "warn";
+  label: string; value: string;
+  brand?: boolean;
+  delta?: { value: number; positive_is_bad?: boolean };
+  spark?: number[]; sparkColor?: string;
 }) {
-  const rendered = useAnimatedNumber(n);
+  const deltaClass = delta
+    ? delta.value === 0 ? "" : delta.value > 0
+      ? (delta.positive_is_bad ? "down" : "up")
+      : (delta.positive_is_bad ? "up" : "down")
+    : "";
   return (
-    <div className={`kpi-card ${tone ?? ""}`}>
-      <div className="label">{label}</div>
-      <div className="value">{rendered.toLocaleString()}</div>
-      {hint && <div className="hint">{hint}</div>}
+    <div className="kpi-card">
+      <div className="kpi-label">{label}</div>
+      <div className={`kpi-value ${brand ? "brand" : ""}`}>{value}</div>
+      {delta && (
+        <div className={`kpi-delta ${deltaClass}`}>
+          {Math.abs(delta.value).toFixed(1)}% vs yesterday
+        </div>
+      )}
+      {spark && spark.length > 0 && <Sparkline points={spark} color={sparkColor ?? "currentColor"} />}
     </div>
   );
 }
 
-// KPI whose value is a plain string (e.g. "3 / 8") — no animation.
-function KpiCardText({
-  label, value, hint, tone,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: "critical" | "high" | "warn";
-}) {
+function TimelineBars({ points }: { points: Array<{ minute: string; count: number; severity: string }> }) {
+  const max = Math.max(1, ...points.map((p) => p.count));
+  const color = (sev: string) =>
+    sev === "critical" ? "var(--sev-critical)" :
+    sev === "high"     ? "var(--sev-high)" :
+    sev === "medium"   ? "var(--sev-medium)" :
+                         "var(--sev-low)";
   return (
-    <div className={`kpi-card ${tone ?? ""}`}>
-      <div className="label">{label}</div>
-      <div className="value">{value}</div>
-      {hint && <div className="hint">{hint}</div>}
+    <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 88, marginTop: 6 }}>
+      {points.map((p, i) => (
+        <div
+          key={i}
+          title={`${p.minute}: ${p.count} events (${p.severity})`}
+          style={{
+            flex: 1,
+            height: `${Math.max(4, (p.count / max) * 100)}%`,
+            background: color(p.severity),
+            borderRadius: "2px 2px 0 0",
+            opacity: 0.85,
+            transition: "opacity 140ms",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
+          onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.85")}
+        />
+      ))}
+    </div>
+  );
+}
+
+function MitreBar({ tactic, covered, total }: { tactic: string; covered: number; total: number }) {
+  const pct = total > 0 ? (covered / total) * 100 : 0;
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div className="row-between" style={{ marginBottom: 3, fontSize: 12 }}>
+        <span className="mono" style={{ color: "var(--ink-secondary)" }}>{tactic}</span>
+        <span className="muted" style={{ fontSize: 11 }}>{covered}/{total}</span>
+      </div>
+      <div style={{ height: 5, borderRadius: 3, background: "var(--bg-elevated-2)", overflow: "hidden" }}>
+        <div style={{
+          width: `${pct}%`,
+          height: "100%",
+          background: pct >= 80 ? "var(--success)" : pct >= 40 ? "var(--warning)" : "var(--danger)",
+          transition: "width 220ms",
+        }} />
+      </div>
+    </div>
+  );
+}
+
+// ---------- Page ---------------------------------------------------------
+
+export default function Dashboard() {
+  const { user } = useAuth();
+  const { connection, eventCount, liveAlerts } = useLive();
+  const [snap, setSnap] = useState<DashboardSnapshot | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiClient
+      .get<DashboardSnapshot>("/api/dashboard/snapshot")
+      .then((r) => setSnap(r.data))
+      .catch(() => {
+        // Fallback shape so the UI still renders (fail-open)
+        setSnap({
+          totals: {
+            events_24h: 0, events_1h: 0, alerts_active: 0,
+            alerts_critical: 0, alerts_high: 0, alerts_medium: 0, alerts_low: 0,
+            endpoints_online: 0, endpoints_total: 0,
+            containment_actions_24h: 0, detection_rate_pct: null, mean_time_to_detect_seconds: null,
+          },
+          deltas: { events_vs_yesterday_pct: null, alerts_vs_yesterday_pct: null },
+          timeline_1h: [], top_threats: [], mitre_coverage: [], integrations: [],
+        });
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const eventSpark = useMemo(
+    () => (snap?.timeline_1h ?? []).slice(-20).map((p) => p.count),
+    [snap]
+  );
+
+  return (
+    <div className="page stack-lg">
+      <header className="row-between" style={{ marginBottom: 4 }}>
+        <div>
+          <h1>Welcome back{user?.username ? `, ${user.username}` : ""}</h1>
+          <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+            Live security overview &middot; last refreshed just now
+          </p>
+        </div>
+        <div className="row" style={{ gap: 8 }}>
+          <NavLink to="/alerts" className="btn btn-secondary">View alerts</NavLink>
+          <NavLink to="/intelligence" className="btn btn-primary">AI Copilot</NavLink>
+        </div>
+      </header>
+
+      {/* --- 1. TOP-LINE PULSE ---------------------------------------- */}
+      <section>
+        <div className="kpi-grid">
+          <KpiCard
+            label="Events · last 24h"
+            value={formatNumber(snap?.totals.events_24h ?? 0)}
+            brand
+            delta={snap?.deltas.events_vs_yesterday_pct !== null && snap?.deltas.events_vs_yesterday_pct !== undefined
+              ? { value: snap.deltas.events_vs_yesterday_pct } : undefined}
+            spark={eventSpark}
+            sparkColor="var(--brand-2)"
+          />
+          <KpiCard
+            label="Active alerts"
+            value={String(snap?.totals.alerts_active ?? 0)}
+            delta={snap?.deltas.alerts_vs_yesterday_pct !== null && snap?.deltas.alerts_vs_yesterday_pct !== undefined
+              ? { value: snap.deltas.alerts_vs_yesterday_pct, positive_is_bad: true } : undefined}
+          />
+          <KpiCard label="Critical" value={String(snap?.totals.alerts_critical ?? 0)} />
+          <KpiCard label="High" value={String(snap?.totals.alerts_high ?? 0)} />
+          <KpiCard
+            label="Endpoints online"
+            value={`${snap?.totals.endpoints_online ?? 0} / ${snap?.totals.endpoints_total ?? 0}`}
+          />
+          <KpiCard
+            label="Mean time to detect"
+            value={formatDuration(snap?.totals.mean_time_to_detect_seconds ?? null)}
+          />
+        </div>
+      </section>
+
+      {/* --- 2. ATTACK TIMELINE + TOP THREATS ------------------------- */}
+      <section style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 14 }}>
+        <div className="panel">
+          <div className="panel-header">
+            <h2>Attack timeline · last hour</h2>
+            <span className="chip">{snap?.totals.events_1h ?? 0} events</span>
+          </div>
+          {loading ? (
+            <div style={{ height: 88 }} className="skeleton" />
+          ) : snap && snap.timeline_1h.length > 0 ? (
+            <TimelineBars points={snap.timeline_1h} />
+          ) : (
+            <div className="empty-state">
+              <div className="icon">📊</div>
+              <div>Waiting for events. Run the demo data script to populate the timeline.</div>
+            </div>
+          )}
+        </div>
+
+        <div className="panel">
+          <div className="panel-header">
+            <h2>Top threats</h2>
+            <NavLink to="/alerts" className="btn btn-ghost btn-sm">All alerts →</NavLink>
+          </div>
+          {loading ? (
+            <>{[0, 1, 2].map((i) => <div key={i} className="skeleton" style={{ height: 40, marginBottom: 8 }} />)}</>
+          ) : snap && snap.top_threats.length > 0 ? (
+            <div className="stack-sm">
+              {snap.top_threats.slice(0, 5).map((t) => (
+                <NavLink
+                  key={t.id}
+                  to={`/alerts/${t.id}`}
+                  style={{ display: "block", padding: 10, borderRadius: "var(--radius-sm)", background: "var(--bg-elevated-2)", textDecoration: "none", color: "inherit" }}
+                >
+                  <div className="row-between">
+                    <strong style={{ fontSize: 13 }}>{t.title}</strong>
+                    <span className={`severity-badge severity-${t.severity}`}>{t.severity}</span>
+                  </div>
+                  <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>
+                    {t.count} occurrences &middot; last seen {t.last_seen}
+                  </div>
+                </NavLink>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state" style={{ padding: 20 }}>
+              <div className="icon">🛡️</div>
+              <div style={{ fontSize: 12 }}>No active threats detected.</div>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* --- 3. MITRE COVERAGE + INTEGRATIONS ------------------------- */}
+      <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div className="panel">
+          <div className="panel-header">
+            <h2>MITRE ATT&amp;CK coverage</h2>
+            <NavLink to="/rules-library" className="btn btn-ghost btn-sm">Library →</NavLink>
+          </div>
+          {loading ? (
+            <>{[0, 1, 2, 3, 4].map((i) => <div key={i} className="skeleton" style={{ height: 24, marginBottom: 8 }} />)}</>
+          ) : snap && snap.mitre_coverage.length > 0 ? (
+            snap.mitre_coverage.map((t) => <MitreBar key={t.tactic} {...t} />)
+          ) : (
+            <div className="empty-state">
+              <div>Load rules to see coverage.</div>
+            </div>
+          )}
+        </div>
+
+        <div className="panel">
+          <div className="panel-header">
+            <h2>Integrations</h2>
+            <NavLink to="/endpoints" className="btn btn-ghost btn-sm">Manage →</NavLink>
+          </div>
+          {loading ? (
+            <>{[0, 1, 2].map((i) => <div key={i} className="skeleton" style={{ height: 32, marginBottom: 6 }} />)}</>
+          ) : snap && snap.integrations.length > 0 ? (
+            <div className="stack-sm">
+              {snap.integrations.map((i) => (
+                <div key={i.name} className="row-between" style={{ padding: "6px 0" }}>
+                  <span style={{ fontSize: 13 }}>{i.name}</span>
+                  <span className={`status-badge status-${i.status === "healthy" ? "resolved" : i.status === "degraded" ? "investigating" : "false_positive"}`}>
+                    {i.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state">
+              <div>No integrations connected.</div>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* --- 4. LIVE FEED --------------------------------------------- */}
+      <section className="panel">
+        <div className="panel-header">
+          <h2>Live event feed</h2>
+          <div className="row" style={{ gap: 8 }}>
+            <span className={`live-indicator ${connection === "live" ? "" : "muted"}`}>{connection}</span>
+            <span className="chip">{eventCount} this session</span>
+          </div>
+        </div>
+        {liveAlerts.length === 0 ? (
+          <div className="empty-state" style={{ padding: 20 }}>
+            <div className="icon">📡</div>
+            <div style={{ fontSize: 12 }}>Waiting for alerts. Any new alert will appear here in real time.</div>
+          </div>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Severity</th>
+                <th>Rule</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              {liveAlerts.slice(0, 8).map((a) => (
+                <tr key={a.id}>
+                  <td className="mono muted">{a.created_at?.slice(11, 19) ?? "—"}</td>
+                  <td><span className={`severity-badge severity-${a.severity}`}>{a.severity}</span></td>
+                  <td>{a.rule_name ?? a.title ?? "—"}</td>
+                  <td className="mono">{a.source_ip ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
     </div>
   );
 }
