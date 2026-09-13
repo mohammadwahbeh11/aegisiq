@@ -1,13 +1,14 @@
 /**
- * Dashboard v3.0 — actually professional layout.
+ * Dashboard v2.9 — WORLD-CLASS POLISH.
  *
- * Fixes v2.9 problems:
- *   1. FIXED 3-column grid on the top row (2 x 3 = 6 KPIs, no orphans)
- *   2. Every KPI has a UNIQUE icon (not all the same triangle)
- *   3. Bigger sparklines that fill the card width
- *   4. Better spacing between sections
- *   5. Consistent card heights via `min-height`
- *   6. Numbers are the visual focus, not decorations
+ * Fixes v2.8's "flat AI-generated" look with:
+ *  - Real SVG icons in every KPI card
+ *  - Role-based glow tints (events=purple, alerts=pink, critical=red…)
+ *  - Zero-state dimming (0 renders muted, not brand pink)
+ *  - Live-tail placeholder with animated bars (not just empty)
+ *  - Section headers with brand accent icon
+ *  - Skeleton loaders matching real shape (no layout shift)
+ *  - Fallback demo data if snapshot endpoint 404s, so the page never looks broken
  */
 import { useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
@@ -16,31 +17,10 @@ import { apiClient } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { useLive } from "../context/LiveContext";
 import {
-  IconActivity, IconAlerts, IconClock, IconServer, IconIntelligence,
+  IconActivity, IconAlerts, IconClock,
+  IconServer, IconTrendingUp,
   IllustrationShield, IllustrationTimeline,
 } from "../components/Icons";
-
-// ---------- Custom icons for KPI variety ------------------------------
-
-const IconAlertTriangle = (p: React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
-    <line x1="12" y1="9" x2="12" y2="13" />
-    <line x1="12" y1="17" x2="12.01" y2="17" />
-  </svg>
-);
-
-const IconZap = (p: React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-  </svg>
-);
-
-const IconFlame = (p: React.SVGProps<SVGSVGElement>) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-    <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
-  </svg>
-);
 
 // ---------- Types --------------------------------------------------------
 
@@ -81,20 +61,14 @@ function formatDuration(s: number | null): string {
 
 function Sparkline({ points, color = "currentColor" }: { points: number[]; color?: string }) {
   const max = Math.max(1, ...points);
-  const w = 240, h = 40, step = points.length > 1 ? w / (points.length - 1) : 0;
+  const w = 100, h = 22, step = points.length > 1 ? w / (points.length - 1) : 0;
   const path = points
-    .map((v, i) => `${i === 0 ? "M" : "L"} ${(i * step).toFixed(1)} ${(h - (v / max) * (h - 4) - 2).toFixed(1)}`)
+    .map((v, i) => `${i === 0 ? "M" : "L"} ${(i * step).toFixed(1)} ${(h - (v / max) * (h - 2) - 1).toFixed(1)}`)
     .join(" ");
   return (
-    <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ marginTop: 10, display: "block" }}>
-      <defs>
-        <linearGradient id={`spark-grad-${color.replace(/[^a-z]/g, "")}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.35" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={`${path} L ${w} ${h} L 0 ${h} Z`} fill={`url(#spark-grad-${color.replace(/[^a-z]/g, "")})`} />
-      <path d={path} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ marginTop: 8 }}>
+      <path d={`${path} L ${w} ${h} L 0 ${h} Z`} fill={color} opacity="0.15" />
+      <path d={path} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -102,10 +76,10 @@ function Sparkline({ points, color = "currentColor" }: { points: number[]; color
 // ---------- KPI card ----------------------------------------------------
 
 function KpiCard({
-  role, Icon, label, value, isZero, delta, spark, sparkColor,
+  role, icon: Icon, label, value, isZero, delta, spark, sparkColor,
 }: {
   role: "events" | "alerts" | "critical" | "high" | "endpoints" | "mttd";
-  Icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   label: string;
   value: string;
   isZero?: boolean;
@@ -117,7 +91,7 @@ function KpiCard({
     ? null
     : delta === 0 ? "no change" : `${delta > 0 ? "↑" : "↓"} ${Math.abs(delta).toFixed(1)}% vs yesterday`;
   return (
-    <div className={`kpi-card role-${role}`} style={{ minHeight: 140 }}>
+    <div className={`kpi-card role-${role}`}>
       <Icon className="kpi-icon" />
       <div className="kpi-label">{label}</div>
       <div className={`kpi-value ${isZero ? "zero" : ""}`}>{value}</div>
@@ -137,28 +111,28 @@ function TimelineBars({ points }: { points: Array<{ minute: string; count: numbe
     sev === "medium"   ? "#eab308" :
                          "#3b82f6";
   return (
-    <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 140, marginTop: 8 }}>
+    <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 120, marginTop: 8 }}>
       {points.map((p, i) => (
         <div
           key={i}
           title={`${p.minute}: ${p.count} events (${p.severity})`}
+          className="timeline-bar"
           style={{
             flex: 1,
-            height: `${Math.max(6, (p.count / max) * 100)}%`,
-            background: `linear-gradient(180deg, ${color(p.severity)}, ${color(p.severity)}88)`,
-            borderRadius: "3px 3px 0 0",
-            boxShadow: `0 0 14px ${color(p.severity)}44`,
-            opacity: 0.88,
-            transition: "opacity 140ms",
+            height: `${Math.max(4, (p.count / max) * 100)}%`,
+            background: `linear-gradient(180deg, ${color(p.severity)}, ${color(p.severity)}aa)`,
+            color: color(p.severity),
+            opacity: 0.85,
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.opacity = "1")}
-          onMouseLeave={(e) => (e.currentTarget.style.opacity = "0.88")}
         />
       ))}
     </div>
   );
 }
 
+// A synthetic timeline that shows what the widget looks like even when the
+// backend hasn't started sending real telemetry yet. Marked visually as
+// "sample data" so nobody confuses it with production.
 function SampleTimeline() {
   const points = useMemo(() => {
     return Array.from({ length: 60 }, (_, i) => {
@@ -173,12 +147,11 @@ function SampleTimeline() {
     <div style={{ position: "relative" }}>
       <TimelineBars points={points} />
       <div style={{
-        position: "absolute", top: 6, right: 6,
-        fontSize: 9.5, letterSpacing: 0.14, textTransform: "uppercase", fontWeight: 600,
-        color: "var(--ink-tertiary)",
-        padding: "3px 8px", borderRadius: 999,
-        background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
-      }}>Sample data</div>
+        position: "absolute", top: 8, right: 8,
+        fontSize: 10, color: "var(--ink-tertiary)",
+        padding: "2px 8px", borderRadius: 999,
+        background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)",
+      }}>SAMPLE</div>
     </div>
   );
 }
@@ -187,18 +160,17 @@ function SampleTimeline() {
 
 function MitreBar({ tactic, covered, total }: { tactic: string; covered: number; total: number }) {
   const pct = total > 0 ? (covered / total) * 100 : 0;
-  const barColor = pct >= 80 ? "#10b981" : pct >= 40 ? "#eab308" : "#ef4444";
+  const barColor = pct >= 80 ? "var(--success)" : pct >= 40 ? "var(--warning)" : "var(--danger)";
   return (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5, fontSize: 12 }}>
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 12 }}>
         <span style={{ color: "var(--ink-secondary)", fontWeight: 500 }}>{tactic}</span>
-        <span style={{ color: "var(--ink-tertiary)", fontSize: 11, fontVariantNumeric: "tabular-nums" }}>{covered}/{total} · {pct.toFixed(0)}%</span>
+        <span className="mono muted" style={{ fontSize: 11 }}>{covered}/{total}</span>
       </div>
-      <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.05)", overflow: "hidden" }}>
+      <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.04)", overflow: "hidden" }}>
         <div style={{
           width: `${pct}%`, height: "100%",
-          background: `linear-gradient(90deg, ${barColor}, ${barColor}aa)`,
-          boxShadow: `0 0 10px ${barColor}55`,
+          background: `linear-gradient(90deg, ${barColor}, color-mix(in srgb, ${barColor} 60%, transparent))`,
           transition: "width 320ms cubic-bezier(0.16,1,0.3,1)",
         }} />
       </div>
@@ -206,15 +178,16 @@ function MitreBar({ tactic, covered, total }: { tactic: string; covered: number;
   );
 }
 
+// Sample MITRE coverage — always renders something meaningful
 const SAMPLE_MITRE = [
-  { tactic: "Initial Access",       covered: 6, total: 9 },
-  { tactic: "Execution",            covered: 9, total: 14 },
-  { tactic: "Persistence",          covered: 4, total: 20 },
+  { tactic: "Initial Access",     covered: 6, total: 9 },
+  { tactic: "Execution",          covered: 9, total: 14 },
+  { tactic: "Persistence",        covered: 4, total: 20 },
   { tactic: "Privilege Escalation", covered: 5, total: 13 },
-  { tactic: "Defense Evasion",      covered: 8, total: 42 },
-  { tactic: "Credential Access",    covered: 7, total: 15 },
-  { tactic: "Lateral Movement",     covered: 3, total: 9 },
-  { tactic: "Exfiltration",         covered: 4, total: 9 },
+  { tactic: "Defense Evasion",    covered: 8, total: 42 },
+  { tactic: "Credential Access",  covered: 7, total: 15 },
+  { tactic: "Lateral Movement",   covered: 3, total: 9 },
+  { tactic: "Exfiltration",       covered: 4, total: 9 },
 ];
 
 const SAMPLE_INTEGRATIONS = [
@@ -229,7 +202,7 @@ const SAMPLE_INTEGRATIONS = [
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { liveAlerts } = useLive();
+  const { connection, eventCount, liveAlerts } = useLive();
   const [snap, setSnap] = useState<DashboardSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [snapshotAvailable, setSnapshotAvailable] = useState(true);
@@ -254,20 +227,18 @@ export default function Dashboard() {
       .finally(() => setLoading(false));
   }, []);
 
-  const eventSpark = useMemo(() => {
-    const real = (snap?.timeline_1h ?? []).slice(-30).map((p) => p.count);
-    if (real.length > 0) return real;
-    return Array.from({ length: 20 }, (_, i) => Math.max(1, Math.sin(i / 3) * 4 + Math.cos(i / 5) * 3 + 5 + Math.random() * 2));
-  }, [snap]);
-
+  const eventSpark = useMemo(
+    () => (snap?.timeline_1h ?? []).slice(-20).map((p) => p.count),
+    [snap]
+  );
   const t = snap?.totals;
 
   return (
     <div className="page stack-lg">
-      {/* ---- Welcome header ---- */}
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 8 }}>
+      {/* ------ Welcome + primary actions ------ */}
+      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 4 }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>
+          <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>
             Welcome back{user?.username ? `, ${user.username}` : ""}
           </h1>
           <p style={{ color: "var(--ink-tertiary)", fontSize: 13, margin: "4px 0 0" }}>
@@ -275,36 +246,38 @@ export default function Dashboard() {
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <NavLink to="/alerts" className="btn btn-secondary">
+          <NavLink to="/alerts" className="btn btn-secondary btn-sm">
             <IconAlerts /> View alerts
           </NavLink>
-          <NavLink to="/intelligence" className="btn btn-primary">
-            <IconIntelligence /> AI Copilot
+          <NavLink to="/intelligence" className="btn btn-primary btn-sm">
+            <IconTrendingUp /> AI Copilot
           </NavLink>
         </div>
       </header>
 
-      {/* ---- KPI grid (fixed 3 columns, 2 rows) ---- */}
+      {/* ------ KPI PULSE ------ */}
       <section>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
-          <KpiCard role="events"    Icon={IconActivity}      label="Events · 24h"        value={formatNumber(t?.events_24h ?? 0)}
-                   isZero={(t?.events_24h ?? 0) === 0}
-                   delta={snap?.deltas.events_vs_yesterday_pct}
-                   spark={eventSpark} sparkColor="#a78bfa" />
-          <KpiCard role="alerts"    Icon={IconAlertTriangle} label="Active alerts"       value={String(t?.alerts_active ?? 0)}
-                   isZero={(t?.alerts_active ?? 0) === 0}
-                   delta={snap?.deltas.alerts_vs_yesterday_pct} />
-          <KpiCard role="critical"  Icon={IconFlame}         label="Critical severity"   value={String(t?.alerts_critical ?? 0)}
-                   isZero={(t?.alerts_critical ?? 0) === 0} />
-          <KpiCard role="high"      Icon={IconZap}           label="High severity"       value={String(t?.alerts_high ?? 0)}
-                   isZero={(t?.alerts_high ?? 0) === 0} />
-          <KpiCard role="endpoints" Icon={IconServer}        label="Endpoints online"    value={`${t?.endpoints_online ?? 0} / ${t?.endpoints_total ?? 0}`}
-                   isZero={(t?.endpoints_total ?? 0) === 0} />
-          <KpiCard role="mttd"      Icon={IconClock}         label="Mean time to detect" value={formatDuration(t?.mean_time_to_detect_seconds ?? null)} />
+        <div className="kpi-grid">
+          <KpiCard role="events"    icon={IconActivity}   label="Events · 24h" value={formatNumber(t?.events_24h ?? 0)}
+            isZero={(t?.events_24h ?? 0) === 0}
+            delta={snap?.deltas.events_vs_yesterday_pct}
+            spark={eventSpark.length ? eventSpark : Array.from({length: 12}, () => Math.random() * 5 + 1)}
+            sparkColor="var(--brand)" />
+          <KpiCard role="alerts"    icon={IconAlerts}     label="Active alerts" value={String(t?.alerts_active ?? 0)}
+            isZero={(t?.alerts_active ?? 0) === 0}
+            delta={snap?.deltas.alerts_vs_yesterday_pct}
+            sparkColor="var(--brand-2)" />
+          <KpiCard role="critical"  icon={IconAlerts}     label="Critical" value={String(t?.alerts_critical ?? 0)}
+            isZero={(t?.alerts_critical ?? 0) === 0} />
+          <KpiCard role="high"      icon={IconAlerts}     label="High" value={String(t?.alerts_high ?? 0)}
+            isZero={(t?.alerts_high ?? 0) === 0} />
+          <KpiCard role="endpoints" icon={IconServer}     label="Endpoints" value={`${t?.endpoints_online ?? 0} / ${t?.endpoints_total ?? 0}`}
+            isZero={(t?.endpoints_total ?? 0) === 0} />
+          <KpiCard role="mttd"      icon={IconClock}      label="Mean time to detect" value={formatDuration(t?.mean_time_to_detect_seconds ?? null)} />
         </div>
       </section>
 
-      {/* ---- Attack Timeline + Top Threats ---- */}
+      {/* ------ ATTACK TIMELINE + TOP THREATS ------ */}
       <section style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 14 }}>
         <div className="panel">
           <div className="panel-header">
@@ -312,7 +285,7 @@ export default function Dashboard() {
             <span className="subtle-count">{t?.events_1h ?? 0} events</span>
           </div>
           {loading ? (
-            <div className="skeleton" style={{ height: 140 }} />
+            <div className="skeleton" style={{ height: 120 }} />
           ) : snap && snap.timeline_1h.length > 0 ? (
             <TimelineBars points={snap.timeline_1h} />
           ) : (
@@ -339,7 +312,10 @@ export default function Dashboard() {
                   display: "block", padding: 12, borderRadius: 8,
                   background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)",
                   textDecoration: "none", color: "inherit",
-                }}>
+                  transition: "all 140ms",
+                }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <strong style={{ fontSize: 13 }}>{th.title}</strong>
                     <span className={`severity-badge severity-${th.severity}`}>{th.severity}</span>
@@ -360,7 +336,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* ---- MITRE Coverage + Integrations ---- */}
+      {/* ------ MITRE COVERAGE + INTEGRATIONS ------ */}
       <section style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         <div className="panel">
           <div className="panel-header">
@@ -368,7 +344,7 @@ export default function Dashboard() {
             <NavLink to="/rules-library" className="btn btn-ghost btn-sm">Library →</NavLink>
           </div>
           {loading ? (
-            <>{[0, 1, 2, 3, 4].map((i) => <div key={i} className="skeleton" style={{ height: 28, marginBottom: 10 }} />)}</>
+            <>{[0, 1, 2, 3, 4].map((i) => <div key={i} className="skeleton" style={{ height: 26, marginBottom: 10 }} />)}</>
           ) : (
             (snap && snap.mitre_coverage.length > 0 ? snap.mitre_coverage : SAMPLE_MITRE).map((tt) => (
               <MitreBar key={tt.tactic} {...tt} />
@@ -382,28 +358,23 @@ export default function Dashboard() {
             <NavLink to="/endpoints" className="btn btn-ghost btn-sm">Manage →</NavLink>
           </div>
           {loading ? (
-            <>{[0, 1, 2].map((i) => <div key={i} className="skeleton" style={{ height: 40, marginBottom: 8 }} />)}</>
+            <>{[0, 1, 2].map((i) => <div key={i} className="skeleton" style={{ height: 32, marginBottom: 8 }} />)}</>
           ) : (
             <div className="stack-sm">
               {(snap && snap.integrations.length > 0 ? snap.integrations : SAMPLE_INTEGRATIONS).map((i) => {
-                const dot = i.status === "healthy" ? "#10b981" : i.status === "degraded" ? "#f59e0b" : "#6b7280";
+                const dot = i.status === "healthy" ? "var(--success)" :
+                           i.status === "degraded" ? "var(--warning)" : "var(--ink-tertiary)";
                 return (
                   <div key={i.name} style={{
                     display: "flex", justifyContent: "space-between", alignItems: "center",
-                    padding: "12px 14px", borderRadius: 8,
+                    padding: "10px 12px", borderRadius: 8,
                     background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)",
                   }}>
-                    <span style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{
-                        width: 8, height: 8, borderRadius: 50,
-                        background: dot,
-                        boxShadow: `0 0 10px ${dot}, 0 0 4px ${dot}`,
-                      }} />
+                    <span style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: 50, background: dot, boxShadow: `0 0 8px ${dot}` }} />
                       {i.name}
                     </span>
-                    <span style={{ fontSize: 10.5, textTransform: "uppercase", letterSpacing: "0.10em", fontWeight: 600, color: dot }}>
-                      {i.status}
-                    </span>
+                    <span className="muted" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.08 }}>{i.status}</span>
                   </div>
                 );
               })}
@@ -412,11 +383,14 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* ---- Live feed ---- */}
+      {/* ------ LIVE FEED ------ */}
       <section className="panel">
         <div className="panel-header">
           <h2>Live event feed</h2>
-          <span className="subtle-count">{liveAlerts.length} recent</span>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span className={connection === "live" ? "live-indicator" : "chip"}>{connection}</span>
+            <span className="subtle-count">{eventCount} this session</span>
+          </div>
         </div>
         {liveAlerts.length === 0 ? (
           <div className="empty-state">
@@ -454,7 +428,7 @@ export default function Dashboard() {
           background: "rgba(59,130,246,0.06)", border: "1px solid rgba(59,130,246,0.20)",
           color: "#93c5fd", fontSize: 12,
         }}>
-          Some panels show sample data because <code>/api/dashboard/snapshot</code> is not deployed yet — the frontend renders defensively.
+          Some panels show sample data because <code>/api/dashboard/snapshot</code> is not deployed yet — the frontend renders defensively. Add the endpoint in v3.0 to replace samples with your real telemetry.
         </div>
       )}
     </div>
