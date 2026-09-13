@@ -358,7 +358,7 @@ export default function Dashboard() {
                 <tr key={a.id}>
                   <td className="mono muted">{a.created_at?.slice(11, 19) ?? "—"}</td>
                   <td><span className={`severity-badge severity-${a.severity}`}>{a.severity}</span></td>
-                  <td>{a.rule_name ?? a.title ?? "—"}</td>
+                  <td>{a.rule_name ?? "—"}</td>
                   <td className="mono">{a.source_ip ?? "—"}</td>
                 </tr>
               ))}
