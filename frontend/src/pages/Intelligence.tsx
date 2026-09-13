@@ -204,10 +204,15 @@ export default function Intelligence() {
       {/* ------------------------------ AI COPILOT ---------------------- */}
       <Panel title="AI Copilot">
         <p className="muted" style={{ marginTop: "-0.25rem", marginBottom: "1rem" }}>
-          {copilot
-            ? `Provider: ${copilot.provider} • Model: ${copilot.model}` +
-              (copilot.configured ? "" : " • not configured (fail-open)")
-            : "Checking provider…"}
+          {(() => {
+            if (!copilot) return "Checking provider…";
+            const prov = (copilot.provider && copilot.provider !== "null") ? copilot.provider : "—";
+            const mdl  = (copilot.model    && copilot.model    !== "null") ? copilot.model    : "—";
+            if (!copilot.configured) {
+              return "No AI provider configured yet — set OPENAI_API_KEY, ANTHROPIC_API_KEY, or OLLAMA_URL on the server to enable AI-assisted triage. (fail-open: everything else still works)";
+            }
+            return `Provider: ${prov} • Model: ${mdl}`;
+          })()}
         </p>
         <form onSubmit={handleExplain} className="inline-form" style={{ marginBottom: "1rem" }}>
           <input
