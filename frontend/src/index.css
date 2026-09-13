@@ -3652,3 +3652,146 @@ kbd {
   text-align: center;
   letter-spacing: 0.05em;
 }
+
+
+/* ------------------------------------------------------------------------
+ * v2.7 frontend polish — additions to index.css.
+ *
+ * Focused fixes noticed during v2.5 dashboard walkthrough:
+ *   1. Panel description prose readable on both themes
+ *   2. Table row hover for scannability
+ *   3. Better mobile behavior (<640px stacks nav + KPI grid)
+ *   4. Focus rings for accessibility (WCAG 2.1 AA)
+ *   5. Skeleton loading state (reduces perceived latency on Render cold-start)
+ *   6. RTL support for Arabic Copilot responses (dir="rtl" already set on the parent)
+ *
+ * How to install: append this whole file at the end of frontend/src/index.css
+ * -----------------------------------------------------------------------*/
+
+/* 1. Muted text stays readable in both themes */
+.muted {
+  color: var(--muted, #94a3b8);
+  line-height: 1.55;
+}
+@media (prefers-color-scheme: light) {
+  .muted { color: #64748b; }
+}
+
+/* 2. Table row hover — makes long tables scannable */
+.table tbody tr {
+  transition: background-color 120ms ease;
+}
+.table tbody tr:hover {
+  background-color: color-mix(in srgb, var(--brand, #7c3aed) 8%, transparent);
+}
+
+/* 3. Mobile layout — under 640px, stack everything to one column */
+@media (max-width: 640px) {
+  .page {
+    padding: 0.75rem !important;
+  }
+  .page-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+  .page-header .btn {
+    width: 100%;
+    margin-top: 0.5rem;
+  }
+  .inline-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .inline-form > * {
+    width: 100% !important;
+    max-width: none !important;
+  }
+  .kv-grid,
+  .pricing-grid,
+  .kpi-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .nav-item {
+    padding: 0.75rem 1rem !important;  /* thumb-sized tap targets */
+  }
+  h1 { font-size: 1.5rem !important; }
+  h2 { font-size: 1.2rem !important; }
+}
+
+/* 4. Focus rings — visible for keyboard users only */
+:focus-visible {
+  outline: 2px solid var(--brand, #7c3aed) !important;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* 5. Skeleton loading — animated grey blocks while Render cold-starts */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--panel-bg, #1f2937) 60%, transparent) 0%,
+    color-mix(in srgb, var(--panel-bg, #1f2937) 40%, transparent) 50%,
+    color-mix(in srgb, var(--panel-bg, #1f2937) 60%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  border-radius: 6px;
+  min-height: 1rem;
+}
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* 6. RTL support — Arabic responses render correctly */
+[dir="rtl"] {
+  text-align: right;
+}
+[dir="rtl"] ol,
+[dir="rtl"] ul {
+  padding-right: 1.5rem;
+  padding-left: 0;
+}
+[dir="rtl"] .copilot-result h3 {
+  border-right: 3px solid var(--brand, #7c3aed);
+  border-left: none;
+  padding-right: 0.5rem;
+  padding-left: 0;
+}
+
+/* 7. Better inline form spacing — was cramped */
+.inline-form {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* 8. Panel spacing polish — description prose doesn't crash into the form */
+.panel > .muted:first-of-type {
+  margin-top: -0.25rem;
+  margin-bottom: 1rem;
+}
+
+/* 9. Reduce motion for users who ask for it */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 10. Print-friendly compliance reports — hide chrome, keep body */
+@media print {
+  nav, .sidebar, .top-bar, header .btn, .toast-rail, footer {
+    display: none !important;
+  }
+  body { background: white !important; color: black !important; }
+  .panel { border: 1px solid #ccc !important; box-shadow: none !important; break-inside: avoid; }
+}
+

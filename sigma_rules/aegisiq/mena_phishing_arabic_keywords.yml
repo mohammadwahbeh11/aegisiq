@@ -1,0 +1,33 @@
+title: MENA-Region Phishing — Arabic Financial Keywords in URL
+id: 9e1f2g3c-5e0g-4d21-b195-cd5d3g8e4h05
+description: URL contains Arabic banking/government keywords commonly used in MENA-targeted phishing (bank, verification, taxes). Requires enrichment step that decodes IDN punycode.
+status: experimental
+author: AegisIQ core (MENA threat panel)
+date: 2026-09-13
+tags:
+  - attack.initial_access
+  - attack.t1566.002
+  - mena.regional
+level: medium
+logsource:
+  category: proxy
+detection:
+  selection:
+    url|contains:
+      - 'مصرف'
+      - 'بنك'
+      - 'تحقق'
+      - 'ضريبة'
+      - 'حكومي'
+      - 'استعادة'
+      - 'الحساب'
+    url|contains:
+      - '.xn--'
+      - '-verify-'
+      - '-account-'
+      - 'login'
+  condition: selection
+falsepositives:
+  - Legitimate Arabic-language banking portal (whitelist known good domains).
+references:
+  - https://attack.mitre.org/techniques/T1566/002/

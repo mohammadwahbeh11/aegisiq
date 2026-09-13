@@ -1,0 +1,23 @@
+title: Impossible Travel — Same User, Two Countries in 1 Hour
+id: 7c9d0e1a-3c8e-4b1f-9c73-ab3b1e6c2f03
+description: Same user authenticates from two IPs that geolocate to different countries within 60 minutes. Classic account takeover signal.
+status: experimental
+author: AegisIQ core
+date: 2026-09-13
+tags:
+  - attack.initial_access
+  - attack.t1078
+  - attack.credential_access
+level: critical
+logsource:
+  category: authentication
+detection:
+  selection:
+    event_type: auth_success
+  timeframe: 60m
+  condition: (count(distinct geo_country) by username) >= 2
+falsepositives:
+  - VPN/proxy user hopping through exit nodes.
+  - Traveling executive.
+references:
+  - https://attack.mitre.org/techniques/T1078/

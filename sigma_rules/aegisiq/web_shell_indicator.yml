@@ -1,0 +1,34 @@
+title: Web Shell Indicator — Suspicious Process Spawned by Web Server
+id: ej5k6l7h-aj5l-4i26-g6ea-hi0i8l3j9m10
+description: A shell or scripting engine (bash, cmd, powershell, python) spawned by a web server process (nginx, apache, w3wp, php-fpm). Signature of a dropped web shell.
+status: stable
+author: AegisIQ core
+date: 2026-09-13
+tags:
+  - attack.persistence
+  - attack.t1505.003
+  - attack.execution
+level: critical
+logsource:
+  category: process_creation
+detection:
+  parent_web:
+    parent_image|endswith:
+      - '/nginx'
+      - '/httpd'
+      - '/apache2'
+      - '\w3wp.exe'
+      - '/php-fpm'
+      - '/node'
+  child_shell:
+    image|endswith:
+      - '/bash'
+      - '/sh'
+      - '\cmd.exe'
+      - '\powershell.exe'
+      - '/python'
+      - '/python3'
+      - '\wscript.exe'
+  condition: parent_web and child_shell
+references:
+  - https://attack.mitre.org/techniques/T1505/003/

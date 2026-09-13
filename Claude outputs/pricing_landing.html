@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>AegisIQ Pricing — Bilingual SIEM/SOAR for MENA SMBs</title>
+<meta name="description" content="Open-core SIEM with AI Copilot, threat intel, and live compliance evidence. Free forever, or $49/analyst/month Pro." />
+<style>
+  :root{--bg:#fafbff;--ink:#0f172a;--muted:#64748b;--brand:#7c3aed;--brand2:#ec4899;--brand3:#f97316;--border:#e2e8f0;--panel:#fff}
+  @media(prefers-color-scheme:dark){:root{--bg:#0b1020;--ink:#e5e9f4;--muted:#8b93b0;--border:#22304f;--panel:#111a33}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,Segoe UI,Inter,system-ui,sans-serif;line-height:1.6}
+  .wrap{max-width:1080px;margin:0 auto;padding:2rem 1.25rem}
+  header{text-align:center;padding:4rem 1rem 2rem}
+  header h1{font-size:clamp(2rem,5vw,3.5rem);margin:0 0 1rem;line-height:1.1;letter-spacing:-.02em;background:linear-gradient(90deg,var(--brand),var(--brand2),var(--brand3));-webkit-background-clip:text;background-clip:text;color:transparent}
+  header p{color:var(--muted);font-size:1.15rem;max-width:56ch;margin:0 auto}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.25rem;margin-top:2rem}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:2rem;display:flex;flex-direction:column}
+  .card.featured{border-color:var(--brand);position:relative;box-shadow:0 8px 30px -12px rgba(124,58,237,.35)}
+  .card.featured::before{content:"Most popular";position:absolute;top:-.75rem;left:50%;transform:translateX(-50%);background:var(--brand);color:#fff;padding:.25rem .75rem;border-radius:999px;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase}
+  .card h3{margin:0 0 .5rem;font-size:1.3rem}
+  .card .amt{font-size:2.5rem;font-weight:700;margin:.75rem 0;letter-spacing:-.02em}
+  .card .per{color:var(--muted);font-size:.9rem;font-weight:400}
+  .card ul{list-style:none;padding:0;margin:1rem 0 1.5rem}
+  .card li{padding-left:1.5rem;position:relative;margin-bottom:.5rem;font-size:.95rem}
+  .card li::before{content:"✓";position:absolute;left:0;color:var(--brand2);font-weight:700}
+  .btn{display:inline-block;padding:.75rem 1.25rem;border-radius:10px;font-weight:600;text-decoration:none;text-align:center;border:none;cursor:pointer;font-size:1rem;margin-top:auto}
+  .btn-primary{background:var(--brand);color:#fff}
+  .btn-primary:hover{background:#6d28d9}
+  .btn-outline{background:transparent;color:var(--ink);border:1px solid var(--border)}
+  .btn-outline:hover{border-color:var(--brand)}
+  .faq{margin-top:4rem}
+  .faq h2{text-align:center;margin-bottom:2rem}
+  .faq details{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:1rem 1.25rem;margin-bottom:.5rem}
+  .faq summary{cursor:pointer;font-weight:600}
+  .faq p{color:var(--muted);margin:.75rem 0 0}
+  footer{text-align:center;padding:3rem 1rem;color:var(--muted);font-size:.85rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Pricing that lets an SMB actually run a SOC.</h1>
+    <p>Splunk charges by the gigabyte. We charge by the analyst — and we start at zero.</p>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Community</h3>
+      <div class="amt">$0 <span class="per">/forever</span></div>
+      <p style="color:var(--muted);margin:0">Self-hosted. Everything you need to run a real SIEM.</p>
+      <ul>
+        <li>Unlimited events &amp; endpoints</li>
+        <li>All 8 built-in detection rules</li>
+        <li>Sigma rule import</li>
+        <li>MFA, audit log, secret encryption</li>
+        <li>Kill-Switch endpoint agent</li>
+        <li>Community support (GitHub)</li>
+      </ul>
+      <a class="btn btn-outline" href="https://github.com/mohammadwahbeh11/aegisiq">Get on GitHub</a>
+    </div>
+
+    <div class="card featured">
+      <h3>Pro</h3>
+      <div class="amt">$49 <span class="per">/analyst/month</span></div>
+      <p style="color:var(--muted);margin:0">Everything in Community, plus the paid features.</p>
+      <ul>
+        <li>AI Copilot (Arabic + English)</li>
+        <li>IP reputation (AbuseIPDB + OTX)</li>
+        <li>Live SOC 2 / ISO 27001 / GDPR reports</li>
+        <li>Monthly compliance report auto-delivered</li>
+        <li>Sigma community feed sync</li>
+        <li>Email support, 1-business-day SLA</li>
+      </ul>
+      <a class="btn btn-primary" href="https://aegisiq-frontend.onrender.com/pricing">Start Pro trial</a>
+    </div>
+
+    <div class="card">
+      <h3>Enterprise</h3>
+      <div class="amt">Custom</div>
+      <p style="color:var(--muted);margin:0">For MSSPs and regulated firms. Starts at $12k/year.</p>
+      <ul>
+        <li>Everything in Pro</li>
+        <li>Multi-tenant workspaces</li>
+        <li>SSO / SAML / SCIM</li>
+        <li>Custom detection rules</li>
+        <li>Data-residency in GCC (KSA/UAE)</li>
+        <li>24×7 phone support, 99.9% SLA</li>
+      </ul>
+      <a class="btn btn-outline" href="mailto:sales@aegisiq.io?subject=AegisIQ%20Enterprise">Contact sales</a>
+    </div>
+  </div>
+
+  <div class="faq">
+    <h2>Questions people actually ask</h2>
+    <details><summary>Is Community really free forever?</summary>
+      <p>Yes. It is Elastic License 2.0 — you can self-host, modify, and use it in production, including in commercial deployments. The only thing ELv2 restricts is offering AegisIQ as a competing hosted product to other people.</p>
+    </details>
+    <details><summary>What runs where?</summary>
+      <p>Community runs 100% on your own hardware — a $20/month VPS is fine for a 50-person org. Pro adds cloud-hosted AI + threat-intel enrichment; you can also run entirely self-hosted by pointing Copilot at your own Ollama instance and skipping enrichment.</p>
+    </details>
+    <details><summary>What data leaves my network on Pro?</summary>
+      <p>On Pro, alert summaries (redacted of raw log bodies) are sent to your chosen AI provider (OpenAI, Anthropic, or your own Ollama). IP addresses you look up hit AbuseIPDB and OTX. Compliance reports never leave your instance. Everything is documented in <code>docs/DATA_FLOW.md</code>.</p>
+    </details>
+    <details><summary>Do you support Arabic?</summary>
+      <p>Yes — the AI Copilot answers in Arabic when you set <code>lang=ar</code>, playbooks are being translated, and the UI ships RTL-ready components. This is a first-class feature, not an afterthought.</p>
+    </details>
+    <details><summary>Cancel anytime?</summary>
+      <p>Yes. Pro is month-to-month via Stripe. Cancel from the billing portal; you keep access to the end of the current period. Downgrading to Community keeps all your data and rules — the Pro features simply gate off.</p>
+    </details>
+  </div>
+</div>
+<footer>
+  AegisIQ &copy; 2026 &middot; <a href="https://github.com/mohammadwahbeh11/aegisiq" style="color:inherit">GitHub</a> &middot; <a href="mailto:sales@aegisiq.io" style="color:inherit">sales@aegisiq.io</a>
+</footer>
+</body>
+</html>

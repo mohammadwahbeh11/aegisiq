@@ -17,6 +17,7 @@ import Rules from "./pages/Rules";
 import Security from "./pages/Security";          // v2.3 MFA
 import Simulation from "./pages/Simulation";
 import Intelligence from "./pages/Intelligence";
+import RulesLibrary from "./pages/RulesLibrary";
 
 /**
  * The LiveProvider wraps the whole authenticated area rather than any
@@ -54,6 +55,7 @@ export default function App() {
         <Route path="/security" element={<Security />} /> {/* v2.3 MFA */}
         <Route path="/simulation" element={<Simulation />} />
         <Route path="/intelligence" element={<Intelligence />} />
+        <Route path="/rules-library" element={<RulesLibrary />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

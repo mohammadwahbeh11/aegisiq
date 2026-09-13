@@ -1,0 +1,27 @@
+title: SSH Brute Force — Persistent Attacker
+id: 6b1c8d5a-1f6d-4e0d-8b62-9a2a0d5c1e01
+description: Detects 10+ SSH auth failures from the same source IP in 5 minutes, followed by a success from that same IP. High-confidence brute-force landing.
+status: stable
+author: AegisIQ core
+date: 2026-09-13
+tags:
+  - attack.credential_access
+  - attack.t1110.001
+  - attack.persistence
+level: high
+logsource:
+  product: linux
+  service: sshd
+detection:
+  failure:
+    event_type: auth_failure
+    service: ssh
+  success:
+    event_type: auth_success
+    service: ssh
+  timeframe: 5m
+  condition: (count(failure) by source_ip) >= 10 and (count(success) by source_ip) >= 1
+falsepositives:
+  - Legitimate user recovering from a lost password.
+references:
+  - https://attack.mitre.org/techniques/T1110/001/

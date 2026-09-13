@@ -1,0 +1,26 @@
+title: Large Outbound Data Transfer to Unusual Destination
+id: 8d0e1f2b-4d9f-4c20-a084-bc4c2f7d3g04
+description: Single-user outbound transfer exceeding 100MB to a destination the user has never contacted in the past 30 days.
+status: experimental
+author: AegisIQ core
+date: 2026-09-13
+tags:
+  - attack.exfiltration
+  - attack.t1041
+  - attack.t1567
+level: high
+logsource:
+  category: network_connection
+detection:
+  selection:
+    event_type: data_transfer
+    direction: outbound
+    bytes|gt: 104857600
+  baseline:
+    seen_in_last_days: 30
+  condition: selection and not baseline
+falsepositives:
+  - Backup jobs.
+  - Bulk export by data engineers.
+references:
+  - https://attack.mitre.org/techniques/T1041/

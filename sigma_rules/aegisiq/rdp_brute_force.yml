@@ -1,0 +1,26 @@
+title: RDP Brute Force from External IP
+id: 3b1e8d2a-2b6d-4a0f-8b62-9a2a0d5c1e02
+description: 15+ Windows 4625 events (failed logon type 10 = RDP) from a non-RFC1918 source in 10 minutes.
+status: stable
+author: AegisIQ core
+date: 2026-09-13
+tags:
+  - attack.credential_access
+  - attack.t1110.001
+level: high
+logsource:
+  product: windows
+  service: security
+detection:
+  selection:
+    event_id: 4625
+    logon_type: 10
+  filter:
+    source_ip|startswith:
+      - '10.'
+      - '172.16.'
+      - '192.168.'
+  timeframe: 10m
+  condition: (count() by source_ip) >= 15 and selection and not filter
+references:
+  - https://attack.mitre.org/techniques/T1110/001/

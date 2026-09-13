@@ -45,6 +45,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { to: "/analysis",  label: "Log analysis",      glyph: "◐", pro: true },
       { to: "/intelligence", label: "Intelligence",     glyph: "*", pro: true },
+      { to: "/rules-library", label: "Rules library",     glyph: "#", pro: true },
     ],
   },
   {

@@ -1,0 +1,30 @@
+title: Ransomware Indicator — Volume Shadow Copy Deletion
+id: di4j5k6g-9i4k-4h25-f5d9-gh9h7k2i8l09
+description: vssadmin.exe delete shadows, wbadmin delete catalog, or bcdedit disabling recovery — all classic ransomware precursors.
+status: stable
+author: AegisIQ core
+date: 2026-09-13
+tags:
+  - attack.impact
+  - attack.t1490
+  - ransomware
+level: critical
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection_vss:
+    event_id: 1
+    image|endswith: '\vssadmin.exe'
+    command_line|contains: 'delete shadows'
+  selection_wbadmin:
+    event_id: 1
+    image|endswith: '\wbadmin.exe'
+    command_line|contains: 'delete catalog'
+  selection_bcdedit:
+    event_id: 1
+    image|endswith: '\bcdedit.exe'
+    command_line|contains: 'recoveryenabled no'
+  condition: 1 of selection_*
+references:
+  - https://attack.mitre.org/techniques/T1490/

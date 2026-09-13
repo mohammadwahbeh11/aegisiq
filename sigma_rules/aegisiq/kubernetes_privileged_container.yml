@@ -1,0 +1,30 @@
+title: Kubernetes Privileged Container Created
+id: ch3i4j5f-8h3j-4g24-e4c8-fg8g6j1h7k08
+description: A pod was created with privileged:true or a hostPath mount hitting a sensitive path. Both are container-escape enablers.
+status: stable
+author: AegisIQ core
+date: 2026-09-13
+tags:
+  - attack.privilege_escalation
+  - attack.t1611
+  - kubernetes
+level: high
+logsource:
+  product: kubernetes
+  service: audit
+detection:
+  selection_privileged:
+    verb: create
+    objectRef.resource: pods
+    requestObject.spec.containers[].securityContext.privileged: true
+  selection_hostpath:
+    verb: create
+    objectRef.resource: pods
+    requestObject.spec.volumes[].hostPath.path|startswith:
+      - '/etc'
+      - '/var/run'
+      - '/proc'
+      - '/'
+  condition: selection_privileged or selection_hostpath
+references:
+  - https://attack.mitre.org/techniques/T1611/

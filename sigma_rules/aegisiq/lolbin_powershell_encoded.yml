@@ -1,0 +1,25 @@
+title: PowerShell Encoded Command Execution
+id: af1g2h3d-6f1h-4e22-c2a6-de6e4h9f5i06
+description: PowerShell invoked with -EncodedCommand or -enc — a very common malware/attacker technique to bypass string-based detection.
+status: stable
+author: AegisIQ core
+date: 2026-09-13
+tags:
+  - attack.execution
+  - attack.t1059.001
+  - attack.defense_evasion
+level: high
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection:
+    event_id: 1
+    image|endswith: '\powershell.exe'
+    command_line|contains:
+      - ' -enc '
+      - ' -EncodedCommand '
+      - ' -e '
+  condition: selection
+references:
+  - https://attack.mitre.org/techniques/T1059/001/

@@ -3,6 +3,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from .detection import rules_api
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
@@ -110,21 +111,36 @@ app.add_middleware(
 )
 
 app.include_router(copilot.router)
+app.include_router(rules_api.router)
 app.include_router(enrichment.router)
+app.include_router(rules_api.router)
 app.include_router(compliance.router)
+app.include_router(rules_api.router)
 app.include_router(health.router)
+app.include_router(rules_api.router)
 app.include_router(auth.router)
+app.include_router(rules_api.router)
 app.include_router(mfa.router)            # v2.3 MFA enrolment/management
 app.include_router(agents.router)
+app.include_router(rules_api.router)
 app.include_router(dashboard.router)
+app.include_router(rules_api.router)
 app.include_router(logs.router)
+app.include_router(rules_api.router)
 app.include_router(alerts.router)
+app.include_router(rules_api.router)
 app.include_router(rules.router)
+app.include_router(rules_api.router)
 app.include_router(soar.router)
+app.include_router(rules_api.router)
 app.include_router(integrations.router)
+app.include_router(rules_api.router)
 app.include_router(retention.router)
+app.include_router(rules_api.router)
 app.include_router(audit.router)          # v2.0
 app.include_router(analysis.router)       # v2.1 premium
 app.include_router(analysis.license_router)  # v2.1 license API
 app.include_router(simulation.router)
+app.include_router(rules_api.router)
 app.include_router(stream.router)
+app.include_router(rules_api.router)
