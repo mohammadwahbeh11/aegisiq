@@ -3805,3 +3805,24 @@ a:focus:not(:focus-visible) {
 
 
 
+
+/* v3.4 — hotfixes */
+.nav-item.active,
+.nav-item.active span,
+.nav-item.active svg {
+  color: #ede9fe !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+.nav-item.active {
+  background: rgba(124,58,237,0.20) !important;
+}
+
+/* Kill the right-side pink bleed completely */
+html, body { background: #05070d !important; }
+body {
+  background-image:
+    radial-gradient(ellipse 500px 300px at 10% 0%, rgba(124,58,237,0.06), transparent 70%) !important;
+  background-attachment: fixed !important;
+  background-repeat: no-repeat !important;
+}

@@ -287,9 +287,21 @@ export default function Dashboard() {
     for (const r of rules) {
       if (!r.enabled) continue;
       const phase = r.kill_chain_phase;
-      if (phase && covered[phase] !== undefined) {
-        if (r.mitre_id) covered[phase].add(r.mitre_id);
-        else covered[phase].add((r as any).name ?? String(r.id));
+      // Broaden: map Cyber Kill Chain phases to MITRE tactics
+      const KC_TO_MITRE: Record<string, string> = {
+        "Reconnaissance": "Initial Access",
+        "Weaponization": "Execution",
+        "Delivery": "Initial Access",
+        "Exploitation": "Execution",
+        "Installation": "Persistence",
+        "Command and Control": "Command and Control",
+        "Actions on Objectives": "Impact",
+        "Actions on Objective": "Impact",
+      };
+      const mappedPhase = phase ? (KC_TO_MITRE[phase] ?? phase) : null;
+      if (mappedPhase && covered[mappedPhase] !== undefined) {
+        if (r.mitre_id) covered[mappedPhase!].add(r.mitre_id);
+        else covered[mappedPhase!].add((r as any).name ?? String(r.id));
       }
     }
     return Object.entries(MITRE_TACTIC_TOTALS).map(([tactic, total]) => ({
