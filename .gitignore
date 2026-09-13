@@ -77,3 +77,6 @@ frontend/vite.config.d.ts
 Claude outputs/
 *.zip
 
+
+*.v27-backup
+*.backup
