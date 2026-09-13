@@ -73,3 +73,7 @@ config.yml
 *.tsbuildinfo
 frontend/vite.config.js
 frontend/vite.config.d.ts
+
+Claude outputs/
+*.zip
+
