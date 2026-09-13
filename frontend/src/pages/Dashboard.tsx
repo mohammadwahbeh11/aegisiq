@@ -267,7 +267,7 @@ export default function Dashboard() {
     const map = new Map<string, { title: string; severity: string; count: number; id: number; lastAt: number }>();
     for (const a of activeAlerts) {
       const key = a.rule_name ?? "Unknown rule";
-      const t = ((a as any).raised_at ?? (a as any).created_at) ? new Date((a as any).raised_at ?? (a as any).created_at).getTime() : 0;
+      const t = ((a as any).timestamp ?? (a as any).timestamp ?? (a as any).raised_at ?? (a as any).created_at) ? new Date((a as any).timestamp ?? (a as any).timestamp ?? (a as any).raised_at ?? (a as any).created_at).getTime() : 0;
       const existing = map.get(key);
       if (!existing) {
         map.set(key, { title: key, severity: a.severity, count: 1, id: a.id, lastAt: t });
@@ -305,7 +305,7 @@ export default function Dashboard() {
     // heuristic: since we don't have per-alert event timestamps here, use last N alerts
     // and estimate MTTD from the time between adjacent alert raised_at values (proxy for detection cadence).
     const times = alerts
-      .map((a) => ((a as any).raised_at ?? (a as any).created_at) ? new Date((a as any).raised_at ?? (a as any).created_at).getTime() : 0)
+      .map((a) => ((a as any).timestamp ?? (a as any).timestamp ?? (a as any).raised_at ?? (a as any).created_at) ? new Date((a as any).timestamp ?? (a as any).timestamp ?? (a as any).raised_at ?? (a as any).created_at).getTime() : 0)
       .filter((t) => t > 0)
       .sort((a, b) => b - a)
       .slice(0, 20);
@@ -354,8 +354,8 @@ export default function Dashboard() {
           <KpiCard role="high"      Icon={IconZap}           label="High severity"       value={String(bySeverity.high)}
                    isZero={bySeverity.high === 0}
                    onClick={() => navigate("/alerts?severity=high")} />
-          <KpiCard role="endpoints" Icon={IconServer}        label="Endpoints online"    value={`${(endpoints as any)?.online ?? 0} / ${(endpoints as any)?.total ?? 0}`}
-                   isZero={((endpoints as any)?.total ?? 0) === 0}
+          <KpiCard role="endpoints" Icon={IconServer}        label="Endpoints online"    value={`${endpoints?.sources ? (endpoints.sources.local + endpoints.sources.wazuh) : 0} / ${endpoints?.total ?? 0}`}
+                   isZero={(endpoints?.total ?? 0) === 0}
                    onClick={() => navigate("/endpoints")} />
           <KpiCard role="mttd"      Icon={IconClock}         label="Median alert gap"    value={formatDuration(meanTimeToDetect)}
                    delta={soarCount > 0 ? `${soarCount} containment actions` : null} />
@@ -474,7 +474,7 @@ export default function Dashboard() {
                 {(liveAlerts.length > 0 ? liveAlerts : activeAlerts).slice(0, 8).map((a: any) => (
                   <tr key={a.id} onClick={() => navigate(`/alerts/${a.id}`)} style={{ cursor: "pointer" }}>
                     <td className="mono muted">{
-                      a.raised_at ? new Date(a.raised_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) :
+                      (a as any).timestamp ? new Date((a as any).timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) :
                       a.created_at?.slice(11, 19) ?? "—"
                     }</td>
                     <td><span className={`severity-badge severity-${a.severity}`}>{a.severity}</span></td>
