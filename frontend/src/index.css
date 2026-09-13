@@ -1,3 +1,5 @@
+@import './styles/aegisiq_design_v2.css';
+
 /*
  * Console stylesheet.
  *
@@ -3797,5 +3799,3 @@ a:focus:not(:focus-visible) {
 
 
 
-/* === v2.8 imported from styles/aegisiq_design_v2.css === */
-@import './styles/aegisiq_design_v2.css';
