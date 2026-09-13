@@ -1,0 +1,420 @@
+/* ============================================================================
+ * AegisIQ v2.9 — WORLD-CLASS POLISH
+ *
+ * Fixes the "flat AI-generated" feel of v2.8 with:
+ *   1. Grid mesh background (subtle, like Vercel/Linear)
+ *   2. Glass-morphism on panels with backdrop-blur
+ *   3. Multi-layer shadows for real depth
+ *   4. Animated brand glow that drifts slowly
+ *   5. KPI cards with radial gradient tint per role
+ *   6. Real SVG icons (via <svg> in TSX, not emoji)
+ *   7. Nav item hover with translated highlight bar
+ *   8. Cmd+K command palette styles
+ *   9. Notification dot on bell icon
+ *  10. Skeleton loaders with subtle shimmer
+ *
+ * Append to index.css AFTER aegisiq_design_v2.css.
+ * ==========================================================================*/
+
+/* --- 1. Background mesh (Vercel-style dotted grid) ------------------- */
+body {
+  background-color: var(--bg-app);
+  background-image:
+    radial-gradient(circle at 20% 10%,  rgba(124,58,237,0.18), transparent 50%),
+    radial-gradient(circle at 80% 90%,  rgba(236,72,153,0.12), transparent 50%),
+    radial-gradient(circle at 50% 50%,  rgba(249,115,22,0.06), transparent 60%),
+    radial-gradient(rgba(255,255,255,0.035) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 24px 24px;
+  background-position: 0 0, 0 0, 0 0, 0 0;
+  background-attachment: fixed;
+  animation: drift 30s ease-in-out infinite alternate;
+}
+@keyframes drift {
+  0%   { background-position: 0% 0%, 0% 0%, 0% 0%, 0 0; }
+  100% { background-position: 5% 5%, -5% -5%, 3% -3%, 0 0; }
+}
+@media (prefers-reduced-motion: reduce) { body { animation: none; } }
+
+/* --- 2. Sidebar polish --------------------------------------------- */
+.sidebar {
+  background: linear-gradient(180deg,
+    rgba(11,14,23,0.98) 0%,
+    rgba(5,7,13,0.98) 100%);
+  border-right: 1px solid rgba(255,255,255,0.05);
+  box-shadow: 1px 0 20px rgba(0,0,0,0.30);
+}
+.sidebar .brand,
+.sidebar h1:first-child {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 18px; font-weight: 800;
+}
+.sidebar .brand::before {
+  content: ""; width: 28px; height: 28px; border-radius: 8px;
+  background: var(--brand-gradient);
+  box-shadow: 0 4px 20px -4px rgba(124,58,237,0.60);
+  -webkit-background-clip: initial; background-clip: initial;
+  flex-shrink: 0;
+}
+.nav-item {
+  position: relative;
+  overflow: hidden;
+}
+.nav-item::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, rgba(124,58,237,0.15), transparent);
+  opacity: 0; transition: opacity 220ms var(--ease-out);
+  pointer-events: none;
+}
+.nav-item:hover::after { opacity: 1; }
+.nav-item.active::after {
+  opacity: 1;
+  background: linear-gradient(90deg, rgba(124,58,237,0.22), rgba(236,72,153,0.05));
+}
+
+/* --- 3. Top bar becomes a real command bar ------------------------ */
+.top-bar {
+  background: color-mix(in srgb, var(--bg-app) 88%, transparent);
+  backdrop-filter: saturate(180%) blur(16px);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding: 12px 32px;
+}
+.top-bar .search-shortcut {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 12px; min-width: 240px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  color: var(--ink-tertiary); font-size: 13px;
+  cursor: pointer;
+  transition: all 140ms var(--ease-out);
+}
+.top-bar .search-shortcut:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.14);
+  color: var(--ink-secondary);
+}
+.top-bar .search-shortcut kbd {
+  margin-left: auto;
+  background: rgba(255,255,255,0.06);
+  padding: 1px 6px; border-radius: 4px;
+  font-size: 10.5px;
+}
+.top-bar .icon-btn {
+  width: 32px; height: 32px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 8px;
+  background: transparent; border: 1px solid transparent;
+  color: var(--ink-secondary); cursor: pointer;
+  position: relative;
+  transition: all 140ms var(--ease-out);
+}
+.top-bar .icon-btn:hover {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.10);
+  color: var(--ink-primary);
+}
+.top-bar .icon-btn .dot {
+  position: absolute; top: 6px; right: 6px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 0 2px var(--bg-app), 0 0 8px rgba(239,68,68,0.60);
+}
+.top-bar .user-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--brand-gradient);
+  display: inline-flex; align-items: center; justify-content: center;
+  color: white; font-weight: 700; font-size: 12px;
+  box-shadow: 0 4px 12px -2px rgba(124,58,237,0.45);
+  cursor: pointer;
+}
+
+/* --- 4. Live indicator — stronger pulse --------------------------- */
+.live-indicator {
+  padding: 6px 14px;
+  background: linear-gradient(135deg, rgba(16,185,129,0.16), rgba(16,185,129,0.06));
+  border: 1px solid rgba(16,185,129,0.30);
+  color: #6ee7b7;
+  box-shadow: 0 0 0 0 rgba(16,185,129,0.20), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.live-indicator::before {
+  width: 8px; height: 8px;
+  background: #10b981;
+  box-shadow: 0 0 12px rgba(16,185,129,0.90);
+}
+
+/* --- 5. KPI cards — real depth + role-based tint ----------------- */
+.kpi-card {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0)),
+    rgba(11,14,23,0.60);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.06);
+  padding: 18px;
+  position: relative; overflow: hidden;
+  transition: all 240ms var(--ease-out);
+}
+.kpi-card::before {
+  content: "";
+  position: absolute; inset: 0;
+  background: radial-gradient(120% 60% at 50% 0%, var(--kpi-glow, rgba(124,58,237,0.14)), transparent 70%);
+  opacity: 0.6;
+  transition: opacity 240ms;
+  pointer-events: none;
+}
+.kpi-card::after {
+  content: "";
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent);
+}
+.kpi-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255,255,255,0.14);
+  box-shadow:
+    0 20px 40px -20px rgba(0,0,0,0.60),
+    0 0 40px -20px var(--kpi-glow, rgba(124,58,237,0.30));
+}
+.kpi-card:hover::before { opacity: 1; }
+
+/* Role-based glow — set --kpi-glow per card */
+.kpi-card.role-events    { --kpi-glow: rgba(124,58,237,0.20); }
+.kpi-card.role-alerts    { --kpi-glow: rgba(236,72,153,0.18); }
+.kpi-card.role-critical  { --kpi-glow: rgba(220,38,38,0.20); }
+.kpi-card.role-high      { --kpi-glow: rgba(249,115,22,0.18); }
+.kpi-card.role-endpoints { --kpi-glow: rgba(59,130,246,0.16); }
+.kpi-card.role-mttd      { --kpi-glow: rgba(16,185,129,0.16); }
+
+.kpi-card .kpi-icon {
+  position: absolute; top: 14px; right: 14px;
+  width: 24px; height: 24px;
+  color: var(--ink-tertiary); opacity: 0.5;
+  transition: opacity 220ms;
+}
+.kpi-card:hover .kpi-icon { opacity: 1; color: var(--ink-secondary); }
+
+.kpi-label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; letter-spacing: 0.12em;
+  color: var(--ink-tertiary);
+}
+.kpi-value {
+  font-size: 32px; font-weight: 800; letter-spacing: -0.03em;
+  margin: 6px 0 4px;
+  color: var(--ink-primary);
+  font-variant-numeric: tabular-nums;
+  position: relative; z-index: 1;
+}
+.kpi-value.zero { color: var(--ink-tertiary); }  /* dim, not brand-color, when zero */
+.kpi-value.brand { background: var(--brand-gradient); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.kpi-context {
+  font-size: 11.5px; color: var(--ink-tertiary);
+  display: flex; align-items: center; gap: 4px;
+}
+
+/* --- 6. Panels — glass surface --------------------------------- */
+.panel, .card {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)),
+    rgba(11,14,23,0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 14px;
+  padding: 18px 20px;
+  position: relative;
+}
+.panel::before {
+  content: ""; position: absolute; inset: 0;
+  border-radius: 14px;
+  padding: 1px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.08), transparent);
+  -webkit-mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.6;
+}
+.panel-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: 12px; margin-bottom: 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.panel-header h2 {
+  font-size: 14px; font-weight: 600;
+  color: var(--ink-primary);
+  letter-spacing: -0.005em;
+}
+.panel-header .subtle-count {
+  font-size: 11px; color: var(--ink-tertiary);
+  padding: 2px 8px; border-radius: 999px;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- 7. Empty states — no more emoji ----------------------------- */
+.empty-state {
+  background: rgba(255,255,255,0.02);
+  border: 1px dashed rgba(255,255,255,0.10);
+  border-radius: 12px;
+  padding: 32px 20px;
+  text-align: center;
+}
+.empty-state .empty-illustration {
+  width: 48px; height: 48px; margin: 0 auto 12px;
+  color: var(--ink-tertiary); opacity: 0.7;
+}
+.empty-state .empty-title {
+  font-size: 13.5px; font-weight: 600;
+  color: var(--ink-secondary); margin-bottom: 4px;
+}
+.empty-state .empty-hint {
+  font-size: 12px; color: var(--ink-tertiary);
+}
+.empty-state .empty-cta {
+  margin-top: 12px; display: inline-flex; align-items: center; gap: 6px;
+}
+
+/* --- 8. Command palette (Cmd+K) --------------------------------- */
+.cmdk-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 12vh;
+  animation: cmdk-fade 140ms var(--ease-out);
+}
+.cmdk-panel {
+  width: min(560px, 92vw);
+  background: rgba(16,20,31,0.98);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 16px;
+  box-shadow: 0 40px 100px -20px rgba(0,0,0,0.60), 0 0 0 1px rgba(255,255,255,0.04) inset;
+  overflow: hidden;
+  animation: cmdk-slide 220ms var(--ease-out);
+}
+.cmdk-input {
+  width: 100%; padding: 16px 20px;
+  background: transparent; border: 0; outline: none;
+  color: var(--ink-primary); font-size: 15px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.cmdk-list { max-height: 60vh; overflow-y: auto; padding: 6px; }
+.cmdk-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 8px;
+  color: var(--ink-secondary); font-size: 13.5px;
+  cursor: pointer;
+}
+.cmdk-item.active {
+  background: rgba(124,58,237,0.15);
+  color: var(--ink-primary);
+}
+.cmdk-item .kbd { margin-left: auto; opacity: 0.6; font-size: 10.5px; }
+.cmdk-group-label {
+  padding: 8px 14px 4px; color: var(--ink-tertiary);
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600;
+}
+@keyframes cmdk-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cmdk-slide { from { transform: translateY(-16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+/* --- 9. Buttons — subtle gradients + shine ---------------------- */
+.btn-primary {
+  background: var(--brand-gradient);
+  position: relative; overflow: hidden;
+  box-shadow: 0 4px 16px -4px rgba(124,58,237,0.55), inset 0 1px 0 rgba(255,255,255,0.15);
+}
+.btn-primary::before {
+  content: ""; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.20), transparent);
+  transition: left 600ms var(--ease-out);
+}
+.btn-primary:hover:not(:disabled)::before { left: 100%; }
+
+.btn-secondary {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  backdrop-filter: blur(10px);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(255,255,255,0.07);
+  border-color: rgba(255,255,255,0.18);
+}
+
+/* --- 10. Skeleton — refined shimmer --------------------------- */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.02) 0%,
+    rgba(255,255,255,0.06) 50%,
+    rgba(255,255,255,0.02) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+/* --- 11. Notifications toast ---------------------------------- */
+.toast-rail {
+  position: fixed; top: 72px; right: 20px;
+  z-index: 40;
+  display: flex; flex-direction: column; gap: 8px;
+  pointer-events: none;
+}
+.toast-rail > * { pointer-events: auto; }
+
+/* --- 12. Focus rings — brand color ---------------------------- */
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* --- 13. Scrollbar — thin + branded --------------------------- */
+* { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.08) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.20); background-clip: padding-box; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+/* --- 14. Sidebar icons — proper spacing ---------------------- */
+.nav-item .glyph, .nav-item svg {
+  width: 16px; height: 16px; flex-shrink: 0;
+  color: currentColor; opacity: 0.75;
+}
+.nav-item.active .glyph, .nav-item.active svg { opacity: 1; }
+
+/* --- 15. Section titles with icon ---------------------------- */
+.section-header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 12px;
+}
+.section-header svg {
+  width: 16px; height: 16px;
+  color: var(--brand-2);
+}
+
+/* --- 16. Data grid rows — better hover ----------------------- */
+.table tbody tr {
+  transition: all 140ms var(--ease-out);
+}
+.table tbody tr:hover {
+  background: linear-gradient(90deg, rgba(124,58,237,0.08), rgba(236,72,153,0.03));
+}
+
+/* --- 17. Timeline bars — glass + glow ----------------------- */
+.timeline-bar {
+  position: relative; overflow: hidden;
+  border-radius: 3px 3px 0 0;
+  box-shadow: 0 0 12px -2px currentColor;
+}
+
+/* --- 18. Print polish ------------------------------------- */
+@media print {
+  body { background: white !important; animation: none !important; }
+  .panel, .card, .kpi-card {
+    background: white !important; box-shadow: none !important;
+    border: 1px solid #d0d5dd !important; backdrop-filter: none !important;
+  }
+  .top-bar, .sidebar, .toast-rail { display: none !important; }
+}
