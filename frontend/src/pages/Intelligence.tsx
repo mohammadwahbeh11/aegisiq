@@ -202,15 +202,13 @@ export default function Intelligence() {
       </header>
 
       {/* ------------------------------ AI COPILOT ---------------------- */}
-      <Panel
-        title="AI Copilot"
-        description={
-          copilot
+      <Panel title="AI Copilot">
+        <p className="muted" style={{ marginTop: "-0.25rem", marginBottom: "1rem" }}>
+          {copilot
             ? `Provider: ${copilot.provider} • Model: ${copilot.model}` +
               (copilot.configured ? "" : " • not configured (fail-open)")
-            : "Checking provider…"
-        }
-      >
+            : "Checking provider…"}
+        </p>
         <form onSubmit={handleExplain} className="inline-form" style={{ marginBottom: "1rem" }}>
           <input
             type="number"
@@ -257,10 +255,10 @@ export default function Intelligence() {
       </Panel>
 
       {/* ------------------------------ ENRICHMENT ---------------------- */}
-      <Panel
-        title="IP Reputation"
-        description="Composite risk score (70% AbuseIPDB + 30% OTX) with 6-hour cache."
-      >
+      <Panel title="IP Reputation">
+        <p className="muted" style={{ marginTop: "-0.25rem", marginBottom: "1rem" }}>
+          Composite risk score (70% AbuseIPDB + 30% OTX) with 6-hour cache.
+        </p>
         <form onSubmit={handleEnrich} className="inline-form" style={{ marginBottom: "1rem" }}>
           <input
             type="text"
@@ -344,10 +342,10 @@ export default function Intelligence() {
       </Panel>
 
       {/* ------------------------------ COMPLIANCE ---------------------- */}
-      <Panel
-        title="Compliance Evidence"
-        description="Live evidence generated from your audit log — SOC 2, ISO/IEC 27001, GDPR."
-      >
+      <Panel title="Compliance Evidence">
+        <p className="muted" style={{ marginTop: "-0.25rem", marginBottom: "1rem" }}>
+          Live evidence generated from your audit log — SOC 2, ISO/IEC 27001, GDPR.
+        </p>
         {complianceError && <ErrorBanner>{complianceError}</ErrorBanner>}
         {loadingFrameworks && <Loading label="Loading frameworks…" />}
         {!loadingFrameworks && frameworks.length === 0 && !complianceError && (
