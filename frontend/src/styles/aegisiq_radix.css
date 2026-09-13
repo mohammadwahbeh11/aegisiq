@@ -1,0 +1,291 @@
+/* ============================================================================
+ * AegisIQ v3.1 — Radix Themes-inspired refinement.
+ *
+ * Design reference authorities used (in priority order):
+ *
+ *   1. Radix UI Themes — https://www.radix-ui.com/themes/docs
+ *      Color scales (12 steps), spacing scale (1-9), radii tokens.
+ *
+ *   2. Vercel Geist Design System — https://vercel.com/geist/introduction
+ *      Sidebar patterns, top-bar composition, focus states.
+ *
+ *   3. Refactoring UI (Wathan & Schoger, 2018) — depth via layered shadows,
+ *      color-by-semantic-role, tabular numerals for figures.
+ *
+ *   4. WCAG 2.2 AA — https://www.w3.org/TR/WCAG22/
+ *      Contrast ratios ≥4.5:1 for body, ≥3:1 for large.
+ *
+ * Fixes v3.0 catastrophic issues from user screenshots (2026-09-13):
+ *   - Rules Library grid orphans (LOW + INFORMATIONAL on their own row)
+ *   - Top-of-page glow too intense
+ *   - Legacy pages (Alerts, Rules) inheriting old red-button styles
+ *   - Gradient buttons stretched full-width
+ *
+ * Append to index.css AFTER aegisiq_worldclass.css.
+ * ==========================================================================*/
+
+/* --- 1. Tone down the aggressive top glow --- */
+body {
+  background-image:
+    radial-gradient(circle at 20% -5%, rgba(124,58,237,0.08), transparent 45%),
+    radial-gradient(circle at 80% 100%, rgba(236,72,153,0.05), transparent 45%),
+    radial-gradient(rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 28px 28px;
+  background-attachment: fixed;
+  animation: none;  /* remove the drifting mesh — too busy */
+}
+
+/* --- 2. Rules Library grid — fixed 3 or 4 columns based on width --- */
+.kpi-grid,
+.stats-grid,
+.metric-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important;
+  gap: 12px !important;
+}
+/* Force at most 4 columns so a 7-item grid becomes 4+3, never 6+1 */
+@media (min-width: 1200px) {
+  .kpi-grid,
+  .stats-grid,
+  .metric-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+  }
+}
+@media (min-width: 900px) and (max-width: 1199px) {
+  .kpi-grid,
+  .stats-grid,
+  .metric-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+}
+
+/* --- 3. Full-width gradient buttons — cap at reasonable width --- */
+.btn-primary {
+  max-width: 100%;
+  padding: 8px 18px !important;
+  min-height: 36px;
+}
+/* When a button lives alone in a panel header, don't stretch */
+.panel-header .btn,
+header .btn {
+  width: auto !important;
+  flex: 0 0 auto;
+}
+/* "Save changes" buttons on Detection Rules — tone down and left-align */
+form button[type="submit"],
+button[type="submit"].btn-primary {
+  width: auto !important;
+  padding: 8px 20px !important;
+  max-width: 260px;
+}
+
+/* --- 4. Delete buttons on legacy pages — use ghost + red text --- */
+button.btn-danger,
+.action-delete,
+button.delete-btn,
+.alert-row button:last-child,
+[class*="delete"] {
+  background: transparent !important;
+  border: 1px solid rgba(239,68,68,0.30) !important;
+  color: #fca5a5 !important;
+  padding: 4px 12px !important;
+  border-radius: 6px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  min-height: 28px !important;
+}
+button.btn-danger:hover,
+.action-delete:hover,
+button.delete-btn:hover {
+  background: rgba(239,68,68,0.10) !important;
+  border-color: rgba(239,68,68,0.50) !important;
+}
+
+/* --- 5. Radix Themes color scale (violet accent) --- */
+:root {
+  /* Accent scale — inspired by Radix `violet` (12 semantic steps) */
+  --accent-1:  rgba(124,58,237,0.02);   /* subtle bg */
+  --accent-2:  rgba(124,58,237,0.05);
+  --accent-3:  rgba(124,58,237,0.09);   /* hover bg */
+  --accent-4:  rgba(124,58,237,0.14);   /* active bg */
+  --accent-5:  rgba(124,58,237,0.20);
+  --accent-6:  rgba(124,58,237,0.28);   /* border */
+  --accent-7:  rgba(124,58,237,0.38);
+  --accent-8:  rgba(124,58,237,0.55);   /* solid border */
+  --accent-9:  #7c3aed;                 /* solid brand */
+  --accent-10: #8b5cf6;                 /* solid hover */
+  --accent-11: #a78bfa;                 /* text on dark */
+  --accent-12: #ede9fe;                 /* text high-contrast */
+}
+
+/* --- 6. Sidebar refinements (Vercel Geist inspired) --- */
+.sidebar {
+  padding: 18px 10px;
+}
+.sidebar .brand {
+  padding: 6px 10px 14px !important;
+  font-size: 17px !important;
+  gap: 10px;
+}
+.sidebar .brand::before {
+  width: 26px !important; height: 26px !important;
+  border-radius: 7px !important;
+}
+.nav-item {
+  padding: 7px 10px !important;
+  border-radius: 6px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  min-height: 30px;
+}
+.nav-item.active {
+  background: var(--accent-3) !important;
+  color: var(--accent-12) !important;
+}
+.nav-item.active::before {
+  left: -10px !important;
+  width: 2px !important;
+  background: var(--accent-9) !important;
+}
+.nav-section-label {
+  padding: 4px 10px !important;
+  font-size: 10px !important;
+  letter-spacing: 0.16em !important;
+}
+
+/* --- 7. Top bar refinements --- */
+.top-bar {
+  padding: 10px 24px !important;
+  min-height: 56px;
+  border-bottom: 1px solid var(--border-subtle) !important;
+}
+.top-bar .search-shortcut {
+  min-width: 200px !important;
+  height: 32px !important;
+  padding: 0 10px !important;
+  font-size: 12.5px !important;
+}
+.top-bar .icon-btn {
+  width: 30px !important; height: 30px !important;
+}
+.top-bar .user-avatar {
+  width: 30px !important; height: 30px !important;
+  font-size: 11.5px !important;
+}
+.live-indicator {
+  padding: 4px 10px !important;
+  font-size: 11.5px !important;
+}
+.chip {
+  padding: 3px 9px !important;
+  font-size: 11px !important;
+}
+
+/* --- 8. Panel refinements (Radix Card spec) --- */
+.panel, .card {
+  padding: 16px 18px !important;
+  border-radius: 12px !important;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)),
+    rgba(11,14,23,0.70) !important;
+}
+.panel-header {
+  padding-bottom: 10px !important;
+  margin-bottom: 12px !important;
+}
+.panel-header h2 {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: var(--ink-primary) !important;
+}
+
+/* --- 9. KPI card refinements — Radix Card spec + tabular numerals --- */
+.kpi-card {
+  padding: 14px 16px !important;
+  border-radius: 12px !important;
+  min-height: 120px;
+}
+.kpi-card .kpi-icon {
+  top: 12px !important; right: 12px !important;
+  width: 18px !important; height: 18px !important;
+}
+.kpi-label {
+  font-size: 10.5px !important;
+  letter-spacing: 0.10em !important;
+}
+.kpi-value {
+  font-size: 26px !important;
+  margin: 4px 0 2px !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+/* --- 10. Table refinements --- */
+.table thead th {
+  padding: 9px 12px !important;
+  font-size: 10.5px !important;
+  letter-spacing: 0.10em !important;
+}
+.table tbody td {
+  padding: 10px 12px !important;
+  font-size: 12.5px !important;
+}
+
+/* --- 11. Form inputs (Radix TextField spec) --- */
+input, select, textarea {
+  min-height: 32px !important;
+  padding: 6px 10px !important;
+  font-size: 12.5px !important;
+  border-radius: 6px !important;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent-9) !important;
+  box-shadow: 0 0 0 2px var(--accent-5) !important;
+}
+label {
+  font-size: 11px !important;
+  color: var(--ink-tertiary) !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.03em !important;
+}
+
+/* --- 12. Severity badges — Radix Badge spec --- */
+.severity-badge, .status-badge {
+  padding: 2px 8px !important;
+  font-size: 10.5px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em !important;
+  border-radius: 999px !important;
+}
+
+/* --- 13. Buttons (Radix Button size 2 spec) --- */
+.btn {
+  min-height: 32px !important;
+  padding: 6px 14px !important;
+  font-size: 12.5px !important;
+  border-radius: 6px !important;
+  gap: 5px !important;
+}
+.btn-sm {
+  min-height: 26px !important;
+  padding: 4px 10px !important;
+  font-size: 11.5px !important;
+}
+
+/* --- 14. Section headers with icons --- */
+h1 { font-size: 22px !important; }
+h2 { font-size: 15px !important; }
+
+/* --- 15. Empty state — tighter --- */
+.empty-state {
+  padding: 24px 16px !important;
+  border-radius: 10px !important;
+}
+.empty-state .empty-illustration {
+  width: 40px !important; height: 40px !important;
+}
+.empty-state .empty-title {
+  font-size: 12.5px !important;
+}
+.empty-state .empty-hint {
+  font-size: 11.5px !important;
+}
