@@ -11,7 +11,7 @@ v2.0 additions:
 """
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -29,10 +29,18 @@ from app.security.mfa_service import is_active, login_requires_second_factor, ve
 from app.security.password_policy import validate as validate_password
 from app.security.net import client_ip
 from app.security.rate_limit import enforce_auth
-from app.security import lockout
+from app.security import lockout, session_cookie
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 settings = get_settings()
+
+
+def _issue_session_cookie(response: Response, request: Request, token: str) -> str | None:
+    """Set the httpOnly session + CSRF cookies when the deployment wants
+    cookie sessions. Returns the CSRF value for the response body."""
+    if not settings.AUTH_COOKIE_ENABLED:
+        return None
+    return session_cookie.issue(response, request, token)
 
 
 def _source_ip(request: Request) -> str | None:
@@ -46,6 +54,7 @@ def _source_ip(request: Request) -> str | None:
 def login(
     payload: LoginRequest,
     request: Request,
+    response: Response,
     _rate=Depends(enforce_auth),
     db: Session = Depends(get_db),
 ):
@@ -139,8 +148,14 @@ def login(
     token = create_access_token(
         subject=user.username, role=user.role.value, token_version=user.token_version,
     )
+    # v3.2 — also set the httpOnly session cookie, so the console can stop
+    # keeping the token where page script (and therefore any XSS) can read
+    # it. The token stays in the body for API clients and for backward
+    # compatibility.
+    csrf = _issue_session_cookie(response, request, token)
     return LoginResult(
-        access_token=token, username=user.username, role=user.role,
+        access_token=token, username=user.username, role=user.role, csrf_token=csrf,
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
 
 
@@ -148,6 +163,7 @@ def login(
 def mfa_verify(
     payload: MfaVerifyRequest,
     request: Request,
+    response: Response,
     _rate=Depends(enforce_auth),
     db: Session = Depends(get_db),
 ):
@@ -194,7 +210,11 @@ def mfa_verify(
     token = create_access_token(
         subject=user.username, role=user.role.value, token_version=user.token_version,
     )
-    return TokenResponse(access_token=token, username=user.username, role=user.role)
+    csrf = _issue_session_cookie(response, request, token)
+    return TokenResponse(
+        access_token=token, username=user.username, role=user.role,
+        csrf_token=csrf, expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
 
 
 # ─── v2.0 password change ────────────────────────────────────────────
@@ -270,6 +290,28 @@ def change_password(
         detail=("Password changed successfully. All existing sessions have been "
                 "signed out — log in again with the new password."),
     )
+
+
+@router.post("/logout")
+def logout(request: Request, response: Response,
+           db: Session = Depends(get_db),
+           user: User = Depends(get_current_user)):
+    """End the session on the SERVER side as well as in the browser.
+
+    v3.2 — there was no logout endpoint at all: the console dropped its
+    copy of the token and called it done, which leaves a stolen token
+    valid for the rest of its TTL. This clears the session cookie and
+    bumps token_version, so every token issued to this user — the one in
+    this tab, one copied elsewhere, one sitting in an attacker's
+    clipboard — stops validating immediately (NIST SP 800-53 AC-12).
+    """
+    user.token_version = int(user.token_version or 1) + 1
+    db.commit()
+    session_cookie.clear(response)
+    audit.record(db, action=audit.ACT_LOGOUT, outcome="success",
+                 username=user.username, source_ip=_source_ip(request),
+                 details={"sessions_revoked": True})
+    return {"ok": True, "detail": "Signed out. All sessions for this account were revoked."}
 
 
 @router.get("/policy", response_model=dict)

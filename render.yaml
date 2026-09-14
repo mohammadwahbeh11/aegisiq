@@ -79,6 +79,55 @@ services:
       # refused by browsers and rejected by the production guardrail.
       - key: CORS_ORIGINS
         value: https://aegisiq-frontend.onrender.com
+      # ── v3.2 accreditation controls ────────────────────────────────
+      # Render terminates TLS at its own edge and forwards the request,
+      # so WITHOUT this every request looks like it came from Render's
+      # proxy: the per-IP login limiter would put every visitor in one
+      # bucket (ten sign-ins a minute for the whole internet, then 429
+      # for everyone), and the audit trail would record the proxy's
+      # address instead of the analyst's. Safe here precisely BECAUSE
+      # there is a proxy in front that overwrites X-Forwarded-For; it
+      # must stay false for a directly-exposed instance, where a client
+      # could forge the header.
+      - key: TRUST_PROXY_HEADERS
+        value: "true"
+      # The console and the API are on different *.onrender.com hosts, so
+      # the session cookie is cross-site: SameSite=None is required for
+      # the browser to send it at all, and a SameSite=None cookie without
+      # Secure is discarded outright. Both services are HTTPS-only, so
+      # this costs nothing. (Same-origin deployment? Use "lax" and drop
+      # AUTH_COOKIE_SECURE_ALWAYS.)
+      - key: AUTH_COOKIE_ENABLED
+        value: "true"
+      - key: AUTH_COOKIE_SAMESITE
+        value: none
+      - key: AUTH_COOKIE_SECURE_ALWAYS
+        value: "true"
+      # NIST SP 800-53 AC-7. Defaults, stated explicitly so an operator
+      # reading this file knows the posture without reading the code.
+      - key: LOCKOUT_THRESHOLD
+        value: "5"
+      - key: LOCKOUT_MINUTES
+        value: "15"
+      # SC-5 — the analysis endpoint refuses a larger body with 413.
+      - key: MAX_UPLOAD_MB
+        value: "25"
+      # MFA: available to every user, not yet mandatory. Set to "true"
+      # for an accredited deployment — since v3.2 a user who has not
+      # enrolled is walked through setup on the login screen, so turning
+      # this on no longer locks the first administrator out.
+      - key: MFA_ENABLED
+        value: "true"
+      - key: MFA_REQUIRED
+        value: "false"
+      # The free plan runs ONE instance, so in-process rate-limit buckets
+      # are correct. If you scale to more than one instance or worker,
+      # point this at a Redis URL — otherwise each worker keeps its own
+      # buckets and the real limit becomes (workers × the configured
+      # rate). /health reports which store is live under
+      # security.rate_limit_store.
+      # - key: REDIS_URL
+      #   value: redis://...
 
   # ── Frontend: Vite build → static hosting ─────────────────────────────
   - type: web

@@ -81,7 +81,16 @@ function scheduleIdleCheck() {
  * Install idle + expiry watchers. Returns a cleanup function.
  * Call once on login; call the returned function on logout.
  */
-export function armSession(token: string, onExpire: () => void): () => void {
+export function armSession(
+  token: string | null,
+  onExpire: () => void,
+  expiresAtEpochSeconds?: number,
+): () => void {
+  // v3.2 — with a cookie session the console never sees the JWT (that is
+  // the point: script cannot read an httpOnly cookie, so neither can an
+  // XSS). The pre-expiry logout therefore takes the expiry timestamp the
+  // login response reported, instead of decoding a token it no longer
+  // holds. Idle timeout is unaffected — it never needed the token.
   idleCallback = onExpire;
   lastLocalActivity = Date.now();
   markActivity();
@@ -107,10 +116,11 @@ export function armSession(token: string, onExpire: () => void): () => void {
   };
   document.addEventListener("visibilitychange", visHandler);
 
-  // Proactive logout 30 s before JWT exp.
-  const claims = decodeJwt(token);
-  if (claims?.exp) {
-    const msUntil = claims.exp * 1000 - Date.now() - PRE_EXPIRY_MS;
+  // Proactive logout 30 s before session expiry.
+  const claims = token ? decodeJwt(token) : null;
+  const expEpoch = claims?.exp ?? expiresAtEpochSeconds;
+  if (expEpoch) {
+    const msUntil = expEpoch * 1000 - Date.now() - PRE_EXPIRY_MS;
     if (msUntil > 0) {
       expiryTimer = window.setTimeout(() => onExpire(), msUntil);
     } else {

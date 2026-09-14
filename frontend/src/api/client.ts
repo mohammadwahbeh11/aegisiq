@@ -30,13 +30,41 @@ function resolveApiUrl(raw: string | undefined): string {
 
 const API_URL = resolveApiUrl(import.meta.env.VITE_API_URL);
 
-export const apiClient = axios.create({ baseURL: API_URL });
+// withCredentials: the session now travels as an httpOnly cookie
+// (v3.2), which the browser only attaches to cross-origin requests when
+// the caller asks for it. Bearer auth still works and is what API
+// clients use; the console prefers the cookie because script — including
+// any XSS — cannot read it.
+export const apiClient = axios.create({ baseURL: API_URL, withCredentials: true });
 
 // Token is kept in localStorage for simplicity in this foundation phase.
 // Known trade-off: localStorage is readable by any JS on the page, so it
 // is more XSS-exposed than an httpOnly cookie. Acceptable for a local
 // graduation-project demo; documented here rather than silently assumed.
 const TOKEN_KEY = "siem_access_token";
+const CSRF_COOKIE = "aegisiq_csrf";
+const CSRF_HEADER = "X-AegisIQ-CSRF";
+
+/**
+ * Read the CSRF cookie the server set alongside the session cookie.
+ *
+ * This one is deliberately NOT httpOnly: the double-submit pattern needs
+ * same-origin script to read it and echo it in a header, which a
+ * cross-site page cannot do. The session cookie itself stays unreadable.
+ */
+export function getCsrfToken(): string | null {
+  try {
+    const match = document.cookie.match(/(?:^|;\s*)aegisiq_csrf=([^;]*)/);
+    return match ? decodeURIComponent(match[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** True when the browser holds a session cookie set by this deployment. */
+export function hasCookieSession(): boolean {
+  return getCsrfToken() !== null;
+}
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -50,7 +78,32 @@ export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
 }
 
+/** Drop the client-visible CSRF marker. The httpOnly session cookie can
+ * only be removed by the server (POST /api/auth/logout), which is the
+ * point of it being httpOnly. */
+export function clearCsrfCookie(): void {
+  try {
+    document.cookie = `${CSRF_COOKIE}=; Max-Age=0; path=/`;
+  } catch {
+    /* storage disabled */
+  }
+}
+
 apiClient.interceptors.request.use((config) => {
+  // Cookie session first: when the server issued one, the browser sends
+  // it automatically and nothing sensitive is kept in JS-reachable
+  // storage. The CSRF header is required on every state-changing call.
+  const csrf = getCsrfToken();
+  if (csrf) {
+    const method = (config.method ?? "get").toUpperCase();
+    if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+      config.headers[CSRF_HEADER] = csrf;
+    }
+    return config;
+  }
+
+  // Fallback: bearer token (a deployment with AUTH_COOKIE_ENABLED=false,
+  // or a browser that refused the cookie).
   const token = getToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -86,6 +139,7 @@ apiClient.interceptors.response.use(
     if (status === 401 && !isAuthAttempt && getToken() && !redirectingToLogin) {
       redirectingToLogin = true;
       clearToken();
+      clearCsrfCookie();
       try {
         localStorage.removeItem("aegisiq_user");
       } catch {
@@ -108,11 +162,15 @@ apiClient.interceptors.response.use(
  * once (http -> ws, https -> wss). A relative VITE_API_URL falls back to
  * the page's own origin.
  */
-export function streamUrl(token: string): string {
+export function streamUrl(token: string | null): string {
   const base = new URL(API_URL, window.location.origin);
   base.protocol = base.protocol === "https:" ? "wss:" : "ws:";
   base.pathname = "/ws/stream";
-  base.search = `?token=${encodeURIComponent(token)}`;
+  // v3.2 — with a cookie session the browser authenticates the handshake
+  // with the httpOnly cookie, so the JWT no longer has to ride in the
+  // query string (where it lands in every proxy access log). The token
+  // form stays for bearer-only deployments.
+  base.search = token && !hasCookieSession() ? `?token=${encodeURIComponent(token)}` : "";
   return base.toString();
 }
 
@@ -129,6 +187,10 @@ export interface LoginResponse {
   token_type: string;
   username: string;
   role: UserRole;
+  /** v3.2 — echo of the CSRF cookie, for clients that cannot read cookies. */
+  csrf_token?: string | null;
+  /** v3.2 — session lifetime in seconds; a cookie session never sees `exp`. */
+  expires_in?: number | null;
 }
 
 // v2.3 — the /api/auth/login response is now union-shaped: either a full
@@ -141,6 +203,8 @@ export interface LoginResult {
   token_type: string;
   username: string | null;
   role: UserRole | null;
+  csrf_token?: string | null;
+  expires_in?: number | null;
 }
 
 export interface MfaStatus {
@@ -305,6 +369,19 @@ export interface HealthReport {
   websocket_subscribers: number;
   soar: string;
   wazuh: string;
+  /** v3.2 — the live security posture, so the console states the server's
+   *  actual limits instead of a number hardcoded in the UI. */
+  security?: {
+    rate_limit_auth_per_minute?: number;
+    rate_limit_store?: string;
+    environment?: string;
+    encryption_at_rest?: string;
+    account_lockout?: string;
+    mfa?: string;
+    session_transport?: string;
+    trust_proxy_headers?: boolean;
+    max_upload_mb?: number;
+  };
 }
 
 export interface MitreCoverageRow {
@@ -333,6 +410,20 @@ export async function login(username: string, password: string): Promise<LoginRe
   return response.data;
 }
 
+/**
+ * Sign out on the server: clears the httpOnly session cookie AND bumps
+ * the account's token_version, so a token copied elsewhere dies too
+ * (NIST AC-12). Never throws — a failed logout must still clear the
+ * client.
+ */
+export async function logoutRequest(): Promise<void> {
+  try {
+    await apiClient.post("/api/auth/logout");
+  } catch {
+    /* already expired, offline, or revoked — the client clears regardless */
+  }
+}
+
 /** Step 2 of login: exchange the MFA challenge token + code for a token. */
 export async function mfaVerify(mfaToken: string, code: string): Promise<LoginResponse> {
   const response = await apiClient.post<LoginResponse>("/api/auth/mfa/verify", {
@@ -345,6 +436,41 @@ export async function mfaVerify(mfaToken: string, code: string): Promise<LoginRe
 // ─── MFA enrolment / management ──────────────────────────────────────
 export async function fetchMfaStatus(): Promise<MfaStatus> {
   const response = await apiClient.get<MfaStatus>("/api/mfa/status");
+  return response.data;
+}
+
+/**
+ * v3.2 — enrol a second factor while only holding the login CHALLENGE
+ * token (MFA_REQUIRED is on and this account has never enrolled). The
+ * backend accepts that token for enrolment and for nothing else, so a
+ * first-run administrator can set MFA up instead of being locked out of
+ * the console by the very policy that is meant to protect it.
+ */
+export async function mfaEnrollWithChallenge(mfaToken: string): Promise<MfaEnrollResponse> {
+  const response = await apiClient.post<MfaEnrollResponse>("/api/mfa/enroll", null, {
+    headers: { Authorization: `Bearer ${mfaToken}` },
+  });
+  return response.data;
+}
+
+export interface MfaConfirmResponse {
+  status: string;
+  backup_codes: string[];
+  note: string;
+  /** Present when the confirmation completed a login (v3.2). */
+  access_token?: string | null;
+  username?: string | null;
+  role?: UserRole | null;
+  expires_in?: number | null;
+}
+
+export async function mfaConfirmWithChallenge(
+  mfaToken: string, code: string,
+): Promise<MfaConfirmResponse> {
+  const response = await apiClient.post<MfaConfirmResponse>(
+    "/api/mfa/confirm", { code },
+    { headers: { Authorization: `Bearer ${mfaToken}` } },
+  );
   return response.data;
 }
 

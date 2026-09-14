@@ -4,6 +4,69 @@ All notable changes to this project are documented here. Format is
 loosely based on [Keep a Changelog](https://keepachangelog.com); dates
 are the day the change landed on `main`.
 
+## [3.2.1] — Session hardening, first-run MFA, shared limiter — 2026-09-14
+
+The second half of the v3.2 audit: the four weaknesses the first pass
+documented but did not fix, plus the deployment settings that were wrong
+in practice. Details and reasoning in `docs/SECURITY_AUDIT_v32.md`
+(findings 15-18).
+
+### Added
+
+- **httpOnly session cookies + CSRF** (`app/security/session_cookie.py`).
+  The console no longer keeps a token in `localStorage`, so an XSS cannot
+  read the session. Cookie-authenticated writes must echo the
+  `aegisiq_csrf` cookie in `X-AegisIQ-CSRF`; bearer requests are exempt
+  (a cross-site page cannot set that header). Bearer auth still works for
+  agents, shippers and the smoke test. `AUTH_COOKIE_ENABLED=false`
+  restores the old behaviour.
+- **`POST /api/auth/logout`** — there was no logout endpoint at all.
+  Clears the cookie and bumps `token_version`, revoking every token for
+  the account (AC-12).
+- **First-run MFA enrolment on the login screen.** `MFA_REQUIRED=true`
+  used to lock the administrator out: an un-enrolled user holds only a
+  challenge token, and `/api/mfa/enroll` rejected it. `get_enrolling_user`
+  accepts it for enrolment only, and `/api/mfa/confirm` returns a real
+  session, so the policy is now usable.
+- **Redis-backed rate limiting** when `REDIS_URL` is set — with more than
+  one worker, in-process buckets multiply the configured limit by the
+  worker count. Fails open, like the in-process limiter.
+- **Security posture in `/health`**: environment, startup guardrail,
+  encryption at rest, lockout policy, MFA mode, session transport, proxy
+  trust, upload ceiling and rate-limit store.
+- Tests: `backend/tests/test_session_hardening_v32.py` (11 tests; 181 total).
+
+### Fixed
+
+- **WebSocket no longer carries the JWT in the query string** for browser
+  clients — it authenticates by cookie, retiring the "the token lands in
+  proxy access logs" trade-off.
+- **Compliance panel was dead on every deployment.** The console read
+  `data.items` from `/api/compliance/frameworks`, which returns
+  `{frameworks: [...]}` — so it always rendered "no frameworks reported.
+  The `/api/compliance` router may not be registered", on a deployment
+  where it was.
+- **Analysis page advertised a 50 MB upload limit** the server would
+  refuse; it now reads the real ceiling from `/health`.
+- **`render.yaml` did not set `TRUST_PROXY_HEADERS`.** Behind Render's
+  edge every request looked like it came from the proxy: the per-IP login
+  limiter put every visitor in one bucket, and the audit trail recorded
+  the proxy's address. Also sets the cross-site cookie flags the split
+  frontend/backend origins require.
+- **Smoke test could fail on a warm database** for two reasons that were
+  the test's fault, not the SIEM's: the dedup-clearing helper only
+  scanned the first page of alerts, and the file-integrity step demanded
+  a fresh alert inside the rule's own 60-second dedup window. It now
+  pages properly and treats a verified in-window suppression as the
+  correct result.
+
+### Changed
+
+- Production guardrail also refuses `AUTH_COOKIE_SAMESITE=none` without
+  `AUTH_COOKIE_SECURE_ALWAYS` (browsers discard such a cookie, so every
+  login would silently fail) and a disabled account lockout.
+
+
 ## [3.2.0] — Security audit + accreditation controls — 2026-09-14
 
 A code-level security audit of the whole backend and console, and the

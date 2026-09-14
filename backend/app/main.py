@@ -56,6 +56,14 @@ async def lifespan(app: FastAPI):
 
     init_db()
 
+    # v3.2 — move the rate-limit buckets to Redis when REDIS_URL is set.
+    # With more than one worker the in-process buckets multiply the
+    # configured limit by the worker count; /health reports which store
+    # actually took effect.
+    from app.security.rate_limit import install_shared_store
+    _store = install_shared_store()
+    logging.getLogger("aegisiq").info("rate-limit store: %s", _store)
+
     # v2.3 — surface the data-at-rest encryption posture at boot so an
     # operator never assumes secrets are encrypted when they are not.
     from app.security import crypto  # local import: avoids a cycle at module load

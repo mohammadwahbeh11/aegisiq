@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     # General — v2.0 branding
     PROJECT_NAME: str = "AegisIQ"                          # commercial name
     PROJECT_TAGLINE: str = "Intelligent Shield SIEM & SOAR"
-    PROJECT_VERSION: str = "3.2.0"
+    PROJECT_VERSION: str = "3.2.1"
     ENV: str = "development"
 
     # Database. Absolute by default (see REPO_ROOT above) rather than the
@@ -195,6 +195,27 @@ class Settings(BaseSettings):
     # could spoof the header to evade the per-IP rate limit and to
     # falsify the source address written into the audit trail.
     TRUST_PROXY_HEADERS: bool = False
+    # SC-23 / ASVS V3.4: issue the session as an httpOnly cookie in
+    # addition to returning the bearer token. The console then keeps
+    # nothing in localStorage, so an XSS cannot read the session. Bearer
+    # auth keeps working for API clients (agents, shippers, the smoke
+    # test) either way.
+    AUTH_COOKIE_ENABLED: bool = True
+    # "lax" suits a console served from the same site as its API. A
+    # console on a DIFFERENT origin from the API (Vercel console + Render
+    # backend) needs "none", which forces Secure and therefore HTTPS.
+    AUTH_COOKIE_SAMESITE: str = "lax"
+    # Force the Secure flag even when the request looks like plain HTTP —
+    # correct behind a TLS-terminating proxy that does not forward the
+    # scheme.
+    AUTH_COOKIE_SECURE_ALWAYS: bool = False
+
+    # SC-5: shared rate-limit store. Blank => in-process buckets (correct
+    # for a single worker). Set to a redis:// URL when running more than
+    # one worker or instance, or the configured limit is silently
+    # multiplied by the worker count.
+    REDIS_URL: str = ""
+
     # IA-5 / AU-3: JWT issuer + audience, validated on every request so a
     # token minted for another service (sharing the same secret by
     # accident) cannot authenticate here.
@@ -260,6 +281,22 @@ def validate_production_security(settings: "Settings") -> list[str]:
         problems.append(
             "CORS_ORIGINS contains '*' (any origin). Pin it to the console's "
             "exact origin(s) in production."
+        )
+    # v3.2 — a cross-origin console needs SameSite=None, and a browser
+    # discards a SameSite=None cookie that is not Secure: the session
+    # would simply never be stored, and every login would look like it
+    # "did nothing". Catch that at boot rather than in the field.
+    if (settings.AUTH_COOKIE_ENABLED
+            and settings.AUTH_COOKIE_SAMESITE.lower() == "none"
+            and not settings.AUTH_COOKIE_SECURE_ALWAYS):
+        problems.append(
+            "AUTH_COOKIE_SAMESITE=none requires AUTH_COOKIE_SECURE_ALWAYS=true "
+            "(browsers drop a SameSite=None cookie without the Secure flag)."
+        )
+    if settings.LOCKOUT_THRESHOLD <= 0:
+        problems.append(
+            "LOCKOUT_THRESHOLD is 0 (account lockout disabled). NIST SP 800-53 "
+            "AC-7 requires a limit on consecutive failed logon attempts."
         )
     if settings.MFA_ENABLED and not settings.MFA_REQUIRED:
         # Not fatal, but strongly recommended — surfaced as a warning by

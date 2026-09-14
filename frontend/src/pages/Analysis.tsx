@@ -15,6 +15,7 @@ import {
   AnalysisReport, LicenseStatus,
   activateLicense, deleteAnalysisReport, fetchAnalysisReports,
   fetchLicenseStatus, openAnalysisReport, uploadAnalysisFile,
+  fetchHealth,
 } from "../api/client";
 import { EmptyState, ErrorBanner, Loading, Panel, SeverityBadge } from "../components/ui";
 import { useAuth } from "../context/AuthContext";
@@ -31,6 +32,19 @@ export default function Analysis() {
   const [licenseKey, setLicenseKey] = useState("");
   const [activating, setActivating] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // v3.2 — the server enforces MAX_UPLOAD_MB (413 past it). The page used
+  // to promise a hardcoded 50 MB, so a deployment with a lower ceiling
+  // advertised a limit it would then refuse. Read the real number.
+  const [maxUploadMb, setMaxUploadMb] = useState(25);
+
+  useEffect(() => {
+    fetchHealth()
+      .then((h) => {
+        const limit = h.security?.max_upload_mb;
+        if (typeof limit === "number" && limit > 0) setMaxUploadMb(limit);
+      })
+      .catch(() => { /* keep the default; the upload itself still reports 413 */ });
+  }, []);
 
   const refreshLicense = useCallback(async () => {
     try { setLicense(await fetchLicenseStatus()); } catch { /* ignore */ }
@@ -133,7 +147,7 @@ export default function Analysis() {
               <div>✓ MITRE ATT&amp;CK-tagged findings + Kill Chain phase</div>
               <div>✓ Printable HTML report — save-as-PDF ready</div>
               <div>✓ Prioritised remediation recommendations</div>
-              <div>✓ Up to 50&nbsp;MB / 100,000 events per file</div>
+              <div>✓ Up to {maxUploadMb}&nbsp;MB / 100,000 events per file</div>
             </div>
 
             {isAdmin ? (
@@ -215,7 +229,7 @@ export default function Analysis() {
                 Choose file to analyze
               </button>
               <p className="muted">
-                .log · .txt · .json · .jsonl · .csv — max 50&nbsp;MB / 100,000 lines
+                .log · .txt · .json · .jsonl · .csv — max {maxUploadMb}&nbsp;MB / 100,000 lines
               </p>
             </>
           )}
@@ -329,7 +343,7 @@ const TIERS: TierInfo[] = [
       "Full log-analysis engine",
       "MITRE ATT&CK-tagged findings",
       "Save-as-PDF report export",
-      "50 MB / 100,000 lines per upload",
+      "100,000 lines per upload (size ceiling set by the server)",
     ],
     accent: "educational",
     recommended: true,

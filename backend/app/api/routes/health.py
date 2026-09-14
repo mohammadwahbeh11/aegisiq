@@ -10,6 +10,7 @@ from app.detection.engine import implemented_rule_types
 from app.integrations import wazuh
 from app.models.rule import DetectionRule
 from app.realtime.hub import hub
+from app.security import crypto, rate_limit
 from app.security.license import verify as verify_license
 
 
@@ -105,9 +106,30 @@ def health_check(db: Session = Depends(get_db)):
         # v2.0 security posture — makes hardening visible to any /health poller.
         "security": {
             "rate_limit_auth_per_minute": settings.RATE_LIMIT_AUTH_PER_MINUTE,
+            "rate_limit_store": rate_limit.store_kind(),
             "security_headers": "active",
             "audit_log": "active" if settings.AUDIT_API_ENABLED else "recorded_only",
             "password_policy": "enforced_on_change",
+            # v3.2 — the posture an operator actually has to verify after a
+            # deploy. Every one of these was invisible before, which is how
+            # a production instance ends up running with the demo guard
+            # rails off and nobody noticing.
+            "environment": "production" if settings.is_production else "development",
+            "startup_guardrail": "enforced" if settings.is_production else "development_bypass",
+            "encryption_at_rest": "active" if crypto.is_enabled() else "plaintext",
+            "account_lockout": (
+                f"{settings.LOCKOUT_THRESHOLD} attempts / {settings.LOCKOUT_MINUTES} min"
+                if settings.LOCKOUT_THRESHOLD > 0 else "disabled"
+            ),
+            "mfa": (
+                "required" if settings.MFA_REQUIRED
+                else ("available" if settings.MFA_ENABLED else "disabled")
+            ),
+            "session_transport": (
+                "cookie+bearer" if settings.AUTH_COOKIE_ENABLED else "bearer"
+            ),
+            "trust_proxy_headers": settings.TRUST_PROXY_HEADERS,
+            "max_upload_mb": settings.MAX_UPLOAD_MB,
         },
         # v2.1 — premium license status (Log Analysis Report).
         "license": _license_snapshot(),

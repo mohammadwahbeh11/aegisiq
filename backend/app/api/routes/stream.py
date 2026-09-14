@@ -28,7 +28,7 @@ from app.auth.security import decode_access_token
 from app.database import SessionLocal
 from app.models.user import User
 from app.realtime.hub import EVENT_HELLO, hub
-from app.security import lockout
+from app.security import lockout, session_cookie
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +79,14 @@ def _authenticate(token: str | None) -> User | None:
 
 @router.websocket("/ws/stream")
 async def stream(websocket: WebSocket, token: str | None = Query(default=None)):
+    # v3.2 — prefer the httpOnly session cookie, which the browser sends
+    # on the handshake automatically. That removes the JWT from the query
+    # string entirely for console users, and with it the "the token ends
+    # up in proxy access logs" trade-off documented above. ?token= stays
+    # supported for non-browser clients and for deployments running with
+    # AUTH_COOKIE_ENABLED=false.
+    if not token:
+        token = websocket.cookies.get(session_cookie.SESSION_COOKIE)
     user = _authenticate(token)
     if user is None:
         # accept() then close() rather than close() alone: a plain close

@@ -236,8 +236,11 @@ assessor reads. One registration each, in one loop.
 | **AU-9** | Protection of audit information | append-only table; db file 0600; `data/` gitignored |
 | **IA-2(1)** | MFA for privileged accounts — on every channel | `api/routes/stream.py`, `api/routes/auth.py` |
 | **IA-5** | Authenticator management — issuer/audience, pinned algorithm | `auth/security.py` |
-| **SC-5** | Denial-of-service protection | `MAX_UPLOAD_MB` streaming cap; rate limiters |
+| **SC-5** | Denial-of-service protection | `MAX_UPLOAD_MB` streaming cap; rate limiters (Redis-backed when `REDIS_URL` is set) |
 | **SC-8/SC-13** | Transport + at-rest cryptography | `docs/HTTPS.md`, `security/crypto.py` |
+| **SC-23** | Session authenticity — httpOnly cookie + CSRF | `security/session_cookie.py`, `auth/dependencies.py` |
+| **ASVS V3.4** | Cookie-based session management | `security/session_cookie.py` |
+| **ASVS V4.2.2** | CSRF protection on state-changing requests | `session_cookie.enforce_csrf` |
 | **SI-10** | Information input validation | Sigma parser; webhook scheme check; IP parsing |
 | **ASVS V2.2/V2.8** | Authentication + one-time verifier controls | lockout, MFA on all channels |
 | **ASVS V3.5** | Token verification | `decode_access_token` (pinned alg, iss, aud) |
@@ -248,24 +251,131 @@ assessor reads. One registration each, in one loop.
 
 ```bash
 cd backend
-python -m pytest -q                       # 170 tests, including the 15 above
-python -m pytest tests/test_security_controls_v32.py -q
+python -m pytest -q                                  # full suite
+python -m pytest tests/test_security_controls_v32.py -q   # findings 1-14
+python -m pytest tests/test_session_hardening_v32.py -q   # findings 15-18
 cd .. && python scripts/smoke_test.py     # 34 end-to-end checks against a running server
-grep -rnE "(^|[^A-Za-z_.])(eval|exec)\(" backend/app   # must print nothing
+grep -rnE "(^|[^A-Za-z_.])(eval|exec)\(" backend/app      # must print nothing
+grep -rn "localStorage" frontend/src/context/AuthContext.tsx  # user profile only, never the token
+curl -s http://localhost:8000/health | jq .security       # the live posture
 ```
 
-## What this audit does **not** claim
+---
+
+## Second pass — the four things the first pass had only named
+
+The list below used to be this document's "not claimed" section: known
+structural weaknesses, honestly stated and left standing. Leaving a
+finding documented is not the same as fixing it, so each one was closed.
+
+### 15 · The session no longer lives in `localStorage` — Medium
+
+`localStorage` is readable by any script on the page, so one XSS
+anywhere in the console — a dependency, a rendered log line, a future
+careless `dangerouslySetInnerHTML` — yields a working analyst token the
+attacker can replay from their own machine. Short token lifetimes and a
+strict CSP reduce that window; they do not close it.
+
+`app/security/session_cookie.py` issues the session as an **httpOnly**
+cookie, which script cannot read at all, alongside a readable CSRF
+cookie. Every state-changing cookie-authenticated request must echo that
+value in `X-AegisIQ-CSRF` (the standard double-submit pattern): the
+browser will attach the session cookie to a request a malicious page
+triggers, but that page cannot read the CSRF cookie to set the header.
+The console writes nothing to `localStorage` when the cookie is in play,
+and requests carrying an `Authorization` header are exempt from the CSRF
+check — a header is not something a cross-site page can set, and
+demanding it there would break the agent, the log shippers and the smoke
+test for no gain. `AUTH_COOKIE_ENABLED=false` restores pure bearer mode.
+
+Two things fell out of this. The WebSocket no longer needs `?token=` for
+browser clients — the cookie authenticates the handshake — which retires
+the "the JWT ends up in every proxy access log" trade-off this document
+listed under Transport. And `POST /api/auth/logout` now exists: there
+was no logout endpoint at all, so signing out dropped the client's copy
+of the token and left it valid for the rest of its lifetime. It clears
+the cookie and bumps `token_version`, revoking every token for that
+account (AC-12).
+
+**Evidence.** `test_login_sets_an_httponly_session_cookie`,
+`test_cookie_write_without_csrf_header_is_refused`,
+`test_cookie_write_with_csrf_header_is_allowed`,
+`test_bearer_write_needs_no_csrf_header`,
+`test_logout_revokes_tokens_issued_before_it`.
+
+### 16 · `MFA_REQUIRED` was unusable, so it was never switched on — Medium
+
+The flag existed and the documentation said to enable it for an
+accredited deployment. Doing so locked the administrator out of their own
+console: an un-enrolled user receives only an `mfa_pending` challenge
+token, and every endpoint rejected it — `/api/mfa/enroll` included. The
+one action the user needed was the one action the policy forbade, and
+the login screen said so, advising them to go to a settings page they
+could not reach. A control that cannot be turned on is not a control.
+
+`get_enrolling_user` accepts the challenge token for enrolment **only**
+(it still opens no alert, log or dashboard), the login screen now walks a
+first-run user through setup — setup key, code, backup codes — and
+`/api/mfa/confirm` returns a real access token, because both factors were
+just proven and sending the user back to the password box proves
+nothing. `MFA_REQUIRED=true` is now a supported configuration rather
+than a trap.
+
+**Evidence.** `test_challenge_token_can_enrol_mfa_but_nothing_else`,
+`test_enrolment_confirmation_returns_a_usable_access_token`.
+
+### 17 · The rate limiter is now correct with more than one worker — Low
+
+In-process buckets mean each worker counts separately, so two workers
+permit twice the configured rate while `/health` still reports the
+single-worker number — a control that passes on paper and fails in
+production. With `REDIS_URL` set the buckets move to Redis behind one
+atomic Lua script (read, refill, consume, store), so workers cannot
+interleave a read-modify-write. Without it, behaviour is exactly as
+before. Either way `/health` now reports
+`security.rate_limit_store`, so which one is live is observable rather
+than assumed. Redis failures fail **open**, like the in-process limiter:
+a limiter that takes the login page down when its cache blips is a worse
+outage than the abuse it prevents.
+
+### 18 · Deployment configuration that was wrong in practice — Medium
+
+`render.yaml` set `ENV=production` and generated real secrets, but left
+`TRUST_PROXY_HEADERS` at its safe default. Render terminates TLS at its
+edge, so *every* request arrived carrying the proxy's address: the
+per-IP login limiter put the entire internet in one bucket (ten sign-ins
+a minute for everyone, then 429), and every audit row recorded the proxy
+instead of the analyst. The flag is now set for that deployment — safe
+there precisely because a proxy in front overwrites the header, and
+still false by default for a directly-exposed instance where a client
+could forge it.
+
+The console and API also sit on different `*.onrender.com` hosts, which
+makes the session cookie cross-site: `SameSite=None` is required for the
+browser to send it, and a `SameSite=None` cookie without `Secure` is
+discarded outright — a login that appears to succeed and then does
+nothing. Both are set, and the production guardrail now refuses to boot
+on that combination rather than letting it fail silently in the field.
+`/health` reports the whole posture (environment, encryption, lockout,
+MFA, session transport, proxy trust, upload ceiling) so a deploy can be
+verified from outside instead of by reading the environment tab.
+
+**Evidence.** `test_health_reports_the_rate_limit_store_and_posture`,
+`test_production_guardrail_rejects_an_unsecured_cookie_policy`.
+
+---
+
+## What this audit still does **not** claim
 
 * No penetration test was performed against a deployed instance; this is
   a code and configuration audit.
-* Tokens live in `localStorage` on the console, which is XSS-exposed by
-  construction. The mitigations are the strict CSP, the absence of any
-  CDN script, and short token lifetimes. An httpOnly-cookie session with
-  CSRF protection remains the stronger design and is the right next step
-  before a production deployment.
-* The rate limiter is in-process. A multi-worker deployment needs a
-  shared store (Redis) for it to mean anything; the lockout counter,
-  being in the database, is already correct across workers.
-* `MFA_REQUIRED` is off by default so the first administrator can enrol.
-  For an accredited deployment it must be on, and `docs/DEPLOYMENT.md`
-  says so.
+* Bearer tokens remain accepted (agents and log shippers need them), so a
+  deployment that leaves `AUTH_COOKIE_ENABLED=false` keeps the
+  `localStorage` exposure described in finding 15. The default is on.
+* The cookie session is a JWT, not a server-side session record: logout
+  and password change revoke it through `token_version`, but there is no
+  per-session list an administrator can browse and kill individually.
+  That needs a sessions table, which is the right next step if per-device
+  sign-out becomes a requirement.
+* `MFA_REQUIRED` still defaults to false so a fresh install can be
+  explored; it is now safe to enable, and an accredited deployment must.

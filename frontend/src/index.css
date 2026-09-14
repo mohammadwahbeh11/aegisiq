@@ -3872,3 +3872,37 @@ body {
   font-size: 0.83rem;
   margin-bottom: 1rem;
 }
+
+/* v3.2 — first-run two-factor enrolment on the login card. The setup key
+   has to be readable and selectable at a glance (people type it into a
+   phone), and the backup codes have to look like something you copy. */
+.mfa-secret {
+  display: block;
+  padding: 0.6rem 0.75rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-input, var(--bg-panel));
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 1rem;
+  letter-spacing: 0.12em;
+  word-break: break-all;
+  user-select: all;
+}
+.mfa-uri { margin: 0.5rem 0 1rem; font-size: 0.78rem; }
+.mfa-uri code { word-break: break-all; }
+.backup-code-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem 0.75rem;
+  list-style: none;
+  margin: 0.75rem 0 1rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-input, var(--bg-panel));
+}
+.backup-code-list code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.9rem;
+  user-select: all;
+}

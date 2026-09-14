@@ -16,17 +16,19 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, get_enrolling_user
 from app.config import get_settings
 from app.models.mfa import MfaStatus, UserMFA
-from app.models.user import User
+from app.auth.security import create_access_token
+from app.models.user import User, UserRole
 from app.security import audit, crypto, totp
 from app.security.mfa_service import get_mfa
+from app.security import session_cookie
 from app.security.net import client_ip
 
 router = APIRouter(prefix="/api/mfa", tags=["mfa"])
@@ -59,6 +61,11 @@ class ConfirmRequest(BaseModel):
 
 
 class ConfirmResponse(BaseModel):
+    # v3.2: set when the enrolment finished a login (see confirm()).
+    access_token: str | None = None
+    token_type: str = "bearer"
+    username: str | None = None
+    role: UserRole | None = None
     status: str
     backup_codes: list[str]
     note: str
@@ -66,6 +73,19 @@ class ConfirmResponse(BaseModel):
 
 class DisableRequest(BaseModel):
     code: str = Field(..., min_length=6, max_length=12)
+
+
+def _finish_login(response: Response, request: Request, user: User) -> str:
+    """Mint the session that completes an enrolment-driven login, and set
+    the httpOnly cookie exactly as /api/auth/login would — otherwise a
+    cookie-session console would finish enrolment holding nothing and
+    bounce straight back to the password box."""
+    token = create_access_token(
+        subject=user.username, role=user.role.value, token_version=user.token_version,
+    )
+    if settings.AUTH_COOKIE_ENABLED:
+        session_cookie.issue(response, request, token)
+    return token
 
 
 @router.get("/status", response_model=MfaStatusResponse)
@@ -81,7 +101,8 @@ def mfa_status(db: Session = Depends(get_db), user: User = Depends(get_current_u
 
 
 @router.post("/enroll", response_model=EnrollResponse)
-def enroll(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def enroll(request: Request, db: Session = Depends(get_db),
+           user: User = Depends(get_enrolling_user)):
     """Begin enrolment: generate a fresh secret, store it PENDING (not yet
     enforced), and return the otpauth URI + secret for the user to add to
     their authenticator app. Re-enrolling overwrites any pending secret;
@@ -118,8 +139,9 @@ def enroll(request: Request, db: Session = Depends(get_db), user: User = Depends
 
 
 @router.post("/confirm", response_model=ConfirmResponse)
-def confirm(payload: ConfirmRequest, request: Request,
-            db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def confirm(payload: ConfirmRequest, request: Request, response: Response,
+            db: Session = Depends(get_db),
+            user: User = Depends(get_enrolling_user)):
     """Finish enrolment: verify the first code, flip to ACTIVE, and issue
     one-time backup codes (shown once, stored only as salted hashes)."""
     row = get_mfa(db, user)
@@ -144,9 +166,17 @@ def confirm(payload: ConfirmRequest, request: Request,
     audit.record(db, action=audit.ACT_MFA_ENROLL_CONFIRM, outcome="success",
                  username=user.username, source_ip=_source_ip(request))
 
+    # v3.2 — enrolment completes the login it was started from. A user
+    # who enrolled because MFA_REQUIRED forced them to has just proven
+    # both factors (password at the challenge step, TOTP right here), so
+    # making them log in again proves nothing and is where a first-run
+    # admin gets stuck.
     return ConfirmResponse(
         status=MfaStatus.ACTIVE.value,
         backup_codes=backup_codes,
+        access_token=_finish_login(response, request, user),
+        username=user.username,
+        role=user.role,
         note=("Store these backup codes somewhere safe. Each works ONCE if you "
               "lose your authenticator. They are not shown again."),
     )

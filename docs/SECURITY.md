@@ -29,6 +29,13 @@ matches what is running — with a file path for every claim.
 | MFA on every channel (v3.2) | The live WebSocket refuses pre-second-factor challenge tokens | `app/api/routes/stream.py` |
 | Upload ceiling (v3.2) | Streamed read, 413 past `MAX_UPLOAD_MB` (NIST SC-5) | `app/api/routes/analysis.py` |
 | Session-end UX (v3.2) | Any unexpected 401 signs the console out with an explanation | `frontend/src/api/client.ts` |
+| httpOnly session cookie (v3.2) | The console keeps no token in `localStorage`; script cannot read the session (NIST SC-23, ASVS V3.4) | `app/security/session_cookie.py` |
+| CSRF double-submit (v3.2) | Cookie-authenticated writes must echo `aegisiq_csrf` in `X-AegisIQ-CSRF`; bearer requests exempt (ASVS V4.2.2) | `session_cookie.enforce_csrf` |
+| Server-side logout (v3.2) | `POST /api/auth/logout` clears the cookie and revokes every token for the account (AC-12) | `app/api/routes/auth.py::logout` |
+| WebSocket without a query token (v3.2) | The live stream authenticates by cookie, so the JWT no longer reaches proxy access logs | `app/api/routes/stream.py` |
+| First-run MFA enrolment (v3.2) | A user forced to use MFA can enrol from the login screen, so `MFA_REQUIRED=true` is usable (IA-2(1)) | `app/auth/dependencies.py::get_enrolling_user` |
+| Shared rate-limit store (v3.2) | Redis-backed buckets when `REDIS_URL` is set, so the limit is not multiplied by the worker count (SC-5) | `app/security/rate_limit.py` |
+| Posture reporting (v3.2) | `/health` states environment, encryption, lockout, MFA, session transport, proxy trust and upload ceiling | `app/api/routes/health.py` |
 | Idle timeout (client) | 15 min, cross-tab, warning at < 2 min | `frontend/src/security.ts` |
 | Pre-expiry logout (client) | 30 s before JWT exp | `frontend/src/security.ts` |
 | RBAC | administrator vs security_analyst | `app/auth/dependencies.py::require_role` |
@@ -175,17 +182,18 @@ of problem occurred from the status code alone.
 
 ## Known trade-offs (stated on purpose)
 
-- **WebSocket auth via query token.** The browser's WebSocket API cannot
-  set headers on the handshake; the alternatives are cookies or a
-  query-string token. This project uses the latter, with the trade-off
-  documented in `app/api/routes/stream.py`. A production deployment
-  should terminate TLS at a proxy and prefer an httpOnly cookie or a
-  short-lived single-use ticket issued specifically for the socket.
+- **WebSocket auth via query token — resolved in v3.2 for browsers.**
+  The handshake now authenticates with the httpOnly session cookie, so
+  the console never puts a JWT in a URL. `?token=` remains accepted for
+  non-browser clients and for deployments running with
+  `AUTH_COOKIE_ENABLED=false`, where the original trade-off still
+  applies (`app/api/routes/stream.py`).
 
-- **In-process rate limiter.** Suits the single-uvicorn-worker
-  deployment the project targets. A multi-worker setup would need a
-  shared store (Redis). Documented at
-  `app/security/rate_limit.py::RateLimiter`.
+- **In-process rate limiter by default.** Suits the single-worker
+  deployment the project targets. Set `REDIS_URL` for a multi-worker
+  setup and the buckets move to Redis behind one atomic script;
+  `/health` reports which store is live under
+  `security.rate_limit_store`.
 
 - **Idle timeout is client-side.** The JWT lifetime is the enforceable
   server ceiling. The client-side idle timer is a UX improvement, not

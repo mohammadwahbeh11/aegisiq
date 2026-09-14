@@ -9,7 +9,9 @@ import {
   ReactNode,
 } from "react";
 
-import { Alert, LogEvent, SoarAction, fetchAlerts, getToken, streamUrl } from "../api/client";
+import { Alert, LogEvent, SoarAction, fetchAlerts, getToken, streamUrl,
+  hasCookieSession,
+} from "../api/client";
 import { useAuth } from "./AuthContext";
 
 /**
@@ -226,8 +228,11 @@ export function LiveProvider({ children }: { children: ReactNode }) {
   const connect = useCallback(() => {
     if (!activeRef.current) return;
 
+    // v3.2 — a cookie session has no token in JS at all; the handshake
+    // authenticates with the httpOnly cookie instead. Either credential
+    // is enough to open the socket, neither means "not signed in".
     const token = getToken();
-    if (!token) {
+    if (!token && !hasCookieSession()) {
       setConnection("offline");
       return;
     }

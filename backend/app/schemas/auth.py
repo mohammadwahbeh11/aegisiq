@@ -13,6 +13,13 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     username: str
     role: UserRole
+    # v3.2 — echo of the (non-httpOnly) CSRF cookie, so a client that
+    # cannot read cookies still has the value it must send back in the
+    # X-AegisIQ-CSRF header on state-changing calls.
+    csrf_token: str | None = None
+    # Session lifetime in seconds. A cookie-session console never sees the
+    # JWT, so it cannot read `exp` to schedule its pre-expiry logout.
+    expires_in: int | None = None
 
 
 class LoginResult(BaseModel):
@@ -36,6 +43,8 @@ class LoginResult(BaseModel):
     token_type: str = "bearer"
     username: str | None = None
     role: UserRole | None = None
+    csrf_token: str | None = None
+    expires_in: int | None = None
 
 
 class MfaVerifyRequest(BaseModel):

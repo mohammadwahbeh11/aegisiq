@@ -12,7 +12,8 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from "react";
 
 import {
-  clearToken, getToken, login as loginRequest, mfaVerify, setToken,
+  clearCsrfCookie, clearToken, getToken, hasCookieSession,
+  login as loginRequest, logoutRequest, mfaVerify, setToken,
   LoginResponse,
 } from "../api/client";
 import { armSession } from "../security";
@@ -36,12 +37,18 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   login: (username: string, password: string) => Promise<LoginOutcome>;
   completeMfa: (mfaToken: string, code: string) => Promise<void>;
+  /** v3.2 — adopt a session minted by /api/mfa/confirm at the end of a
+   *  first-run enrolment. Both factors were just proven there, so the
+   *  console signs the user in rather than returning them to the form. */
+  adoptSession: (response: LoginResponse) => void;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const USER_KEY = "aegisiq_user";
+// Used only when the server did not report expires_in (an older backend).
+const SESSION_FALLBACK_SECONDS = 60 * 60;
 const LEGACY_USER_KEY = "siem_user";  // migrated once on load
 
 function loadStoredUser(): AuthUser | null {
@@ -74,8 +81,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    // v3.2 — sign out on the SERVER too. Clearing local state only ever
+    // ended the session in this tab: the token stayed valid for the rest
+    // of its lifetime, so "log out" did not evict anyone holding a copy.
+    // POST /api/auth/logout clears the httpOnly cookie and bumps
+    // token_version, which revokes every token issued to this account.
+    void logoutRequest();
     disarmSession();
     clearToken();
+    clearCsrfCookie();
     try {
       localStorage.removeItem(USER_KEY);
     } catch {
@@ -84,19 +98,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, [disarmSession]);
 
-  const armForToken = useCallback((token: string) => {
+  const armForToken = useCallback((token: string | null, expiresInSeconds?: number) => {
     disarmSession();
+    const expiresAt = expiresInSeconds
+      ? Math.floor(Date.now() / 1000) + expiresInSeconds
+      : undefined;
     sessionCleanupRef.current = armSession(token, () => {
-      // Idle timeout or JWT pre-expiry -> log out.
+      // Idle timeout or session pre-expiry -> log out.
       logout();
-    });
+    }, expiresAt);
   }, [disarmSession, logout]);
 
   // On a page refresh, re-arm the watchers using the persisted token.
   useEffect(() => {
     const token = getToken();
-    if (token && user) {
-      armForToken(token);
+    if (user && (token || hasCookieSession())) {
+      // After a refresh the cookie session's exact expiry is not known to
+      // the page (it is inside the httpOnly cookie). The idle watcher
+      // still arms; the server's own expiry, surfaced as a 401 by the API
+      // client, ends the session cleanly if it lapses first.
+      armForToken(token, token ? undefined : SESSION_FALLBACK_SECONDS);
     }
     return disarmSession;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -104,7 +125,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Shared: persist a full token + user and arm the session watchers.
   const finalize = useCallback((response: LoginResponse) => {
-    setToken(response.access_token);
+    // v3.2 — when the server issued an httpOnly session cookie, the token
+    // is NOT written to localStorage: keeping a copy there would hand it
+    // straight back to any XSS and undo the point of the cookie. The
+    // bearer path is kept for deployments with AUTH_COOKIE_ENABLED=false.
+    const cookieSession = hasCookieSession();
+    if (!cookieSession) {
+      setToken(response.access_token);
+    } else {
+      clearToken();
+    }
     const authUser: AuthUser = { username: response.username, role: response.role };
     try {
       localStorage.setItem(USER_KEY, JSON.stringify(authUser));
@@ -112,8 +142,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // ignore
     }
     setUser(authUser);
-    armForToken(response.access_token);
+    armForToken(
+      cookieSession ? null : response.access_token,
+      response.expires_in ?? SESSION_FALLBACK_SECONDS,
+    );
   }, [armForToken]);
+
+  const adoptSession = useCallback((response: LoginResponse) => {
+    finalize(response);
+  }, [finalize]);
 
   async function login(username: string, password: string): Promise<LoginOutcome> {
     const result = await loginRequest(username, password);
@@ -143,7 +180,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated: !!user && !!getToken(), login, completeMfa, logout }}
+      value={{
+        user,
+        isAuthenticated: !!user && (!!getToken() || hasCookieSession()),
+        login, completeMfa, logout, adoptSession,
+      }}
     >
       {children}
     </AuthContext.Provider>

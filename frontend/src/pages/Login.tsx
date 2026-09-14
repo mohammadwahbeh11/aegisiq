@@ -1,11 +1,14 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { fetchHealth } from "../api/client";
+import {
+  fetchHealth, mfaConfirmWithChallenge, mfaEnrollWithChallenge,
+  MfaConfirmResponse, MfaEnrollResponse,
+} from "../api/client";
 import { useAuth } from "../context/AuthContext";
 
 export default function Login() {
-  const { login, completeMfa } = useAuth();
+  const { login, completeMfa, adoptSession } = useAuth();
   const navigate = useNavigate();
 
   const [username, setUsername] = useState("");
@@ -15,7 +18,11 @@ export default function Login() {
   const [backend, setBackend] = useState<"checking" | "up" | "down">("checking");
 
   // v2.3 — second-factor step state.
-  const [stage, setStage] = useState<"credentials" | "mfa">("credentials");
+  const [stage, setStage] = useState<"credentials" | "mfa" | "enroll">("credentials");
+  // v3.2 — first-run enrolment, driven by the login challenge token.
+  const [enrollment, setEnrollment] = useState<MfaEnrollResponse | null>(null);
+  const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
+  const [enrolledSession, setEnrolledSession] = useState<MfaConfirmResponse | null>(null);
 
   // v3.2 — the API client redirects here with ?reason=session_expired when
   // a token stops being accepted mid-session (expiry, a password change
@@ -92,6 +99,18 @@ export default function Login() {
       // Second factor required.
       setMfaToken(outcome.mfaToken);
       setEnrollmentNeeded(outcome.enrollmentRequired);
+      if (outcome.enrollmentRequired && outcome.mfaToken) {
+        // MFA is mandatory and this account has never enrolled: start the
+        // enrolment here rather than telling the user to go and find a
+        // settings page they cannot reach without logging in first.
+        try {
+          setEnrollment(await mfaEnrollWithChallenge(outcome.mfaToken));
+          setStage("enroll");
+          return;
+        } catch (enrollErr: unknown) {
+          setError(describeError(enrollErr, "Could not start two-factor setup."));
+        }
+      }
       setStage("mfa");
     } catch (err: unknown) {
       setError(describeError(err, "Incorrect username or password."));
@@ -115,10 +134,61 @@ export default function Login() {
     }
   }
 
+  async function handleEnrollConfirm(event: FormEvent) {
+    event.preventDefault();
+    if (!mfaToken) return;
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      const result = await mfaConfirmWithChallenge(mfaToken, code.trim());
+      if (result.backup_codes?.length) {
+        // Shown once — the user must copy them before entering the console.
+        setEnrolledSession(result);
+        setBackupCodes(result.backup_codes);
+        setCode("");
+        return;
+      }
+      await completeMfa(mfaToken, code.trim());
+      navigate("/dashboard");
+    } catch (err: unknown) {
+      setError(describeError(err, "That code did not verify. Check your device clock."));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  function finishEnrollment() {
+    // /api/mfa/confirm already minted a session (and set the httpOnly
+    // cookie): both factors were proven a moment ago, so the console
+    // signs the user in instead of sending them back to the password box.
+    const session = enrolledSession;
+    if (session?.access_token && session.username && session.role) {
+      adoptSession({
+        access_token: session.access_token,
+        token_type: "bearer",
+        username: session.username,
+        role: session.role,
+        expires_in: session.expires_in ?? null,
+      });
+      navigate("/dashboard");
+      return;
+    }
+    // No session came back (an older backend): fall back to a normal
+    // sign-in, which now finds an enrolled authenticator.
+    setBackupCodes(null);
+    setEnrollment(null);
+    setEnrolledSession(null);
+    resetToCredentials();
+    setNotice("Two-factor is set up. Sign in with your password and a code from your app.");
+  }
+
   function resetToCredentials() {
     setStage("credentials");
     setCode("");
     setMfaToken(null);
+    setEnrollment(null);
+    setBackupCodes(null);
+    setEnrolledSession(null);
     setError(null);
   }
 
@@ -174,13 +244,65 @@ export default function Login() {
               {isSubmitting ? "Signing in…" : "Sign in"}
             </button>
           </form>
+        ) : stage === "enroll" && backupCodes ? (
+          <div className="mfa-enroll-notice">
+            <p>
+              <b>Two-factor is active.</b> Save these backup codes now — each one
+              works once if you lose your authenticator, and they are not shown
+              again.
+            </p>
+            <ul className="backup-code-list">
+              {backupCodes.map((c) => <li key={c}><code>{c}</code></li>)}
+            </ul>
+            <button
+              className="btn-primary"
+              disabled={isSubmitting}
+              onClick={finishEnrollment}
+            >
+              I have saved them — continue
+            </button>
+          </div>
+        ) : stage === "enroll" && enrollment ? (
+          <form onSubmit={handleEnrollConfirm}>
+            <p className="mfa-hint">
+              This console requires two-factor authentication. Add the key below
+              to Google Authenticator, Authy, 1Password or Microsoft
+              Authenticator, then enter the 6-digit code it shows.
+            </p>
+            <div className="field">
+              <label htmlFor="setup-key">Setup key</label>
+              <code id="setup-key" className="mfa-secret">{enrollment.secret}</code>
+            </div>
+            <details className="mfa-uri">
+              <summary>Or paste this otpauth:// URI</summary>
+              <code>{enrollment.otpauth_uri}</code>
+            </details>
+            <div className="field">
+              <label htmlFor="code">Code from your app</label>
+              <input
+                id="code"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="123456"
+                autoFocus
+                required
+              />
+            </div>
+            <button className="btn-primary" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Verifying…" : "Activate two-factor"}
+            </button>
+            <button type="button" className="btn-secondary" onClick={resetToCredentials}>
+              ← Back
+            </button>
+          </form>
         ) : enrollmentNeeded ? (
           <div className="mfa-enroll-notice">
             <p>
-              This account is required to set up two-factor authentication before
-              first use. Sign in on a session where you can reach the
-              <b> Security → Two-factor</b> settings, or ask an administrator to
-              relax <code>MFA_REQUIRED</code> for the initial setup.
+              This account must set up two-factor authentication, but the setup
+              step could not be started. Try signing in again, or ask an
+              administrator to check the server logs.
             </p>
             <button className="btn-secondary" onClick={resetToCredentials}>
               ← Back

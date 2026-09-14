@@ -74,7 +74,11 @@ async function enrichIp(ip: string): Promise<EnrichmentResult> {
 
 async function fetchComplianceFrameworks(): Promise<ComplianceFramework[]> {
   const { data } = await apiClient.get("/api/compliance/frameworks");
-  return data.items ?? [];
+  // The API returns {frameworks: [...]}. This read `data.items`, which is
+  // always undefined — so the panel always rendered "no frameworks
+  // reported / the router may not be registered", and the compliance
+  // evidence feature looked broken on every deployment that had it.
+  return data.frameworks ?? data.items ?? [];
 }
 
 async function openComplianceReport(id: ComplianceFramework["id"]): Promise<void> {

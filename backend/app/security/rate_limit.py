@@ -120,6 +120,172 @@ auth_limiter = RateLimiter(rate_per_minute=10, burst=5, name="auth")
 mutate_limiter = RateLimiter(rate_per_minute=60, burst=20, name="mutate")
 
 
+# ── v3.2 · shared store for multi-worker deployments ────────────────
+#
+# The buckets above live in ONE process's memory. Run two uvicorn workers
+# (or two Render instances behind the load balancer) and each keeps its
+# own counters, so the effective limit silently becomes N × the configured
+# rate — the limiter reports 10/min and permits 20. That is the kind of
+# control that passes an audit on paper and fails in production.
+#
+# When REDIS_URL is set, the buckets move to Redis and every worker shares
+# them. The implementation is a single atomic Lua script (read, refill,
+# consume, store) so two workers cannot interleave a read-modify-write.
+# Without REDIS_URL — or if Redis is unreachable — the in-process buckets
+# are used exactly as before, and /health reports which store is live so
+# the difference is never a surprise.
+
+_REFILL_AND_CONSUME = """
+local tokens_key = KEYS[1]
+local ts_key     = KEYS[2]
+local rate       = tonumber(ARGV[1])   -- tokens per second
+local burst      = tonumber(ARGV[2])
+local now        = tonumber(ARGV[3])
+local ttl        = tonumber(ARGV[4])
+
+local tokens = tonumber(redis.call('get', tokens_key))
+local last   = tonumber(redis.call('get', ts_key))
+if tokens == nil then tokens = burst end
+if last == nil then last = now end
+
+local elapsed = math.max(0, now - last)
+tokens = math.min(burst, tokens + elapsed * rate)
+
+local wait = 0
+if tokens >= 1 then
+  tokens = tokens - 1
+else
+  wait = (1 - tokens) / rate
+end
+
+redis.call('set', tokens_key, tokens, 'EX', ttl)
+redis.call('set', ts_key, now, 'EX', ttl)
+return tostring(wait)
+"""
+
+
+class RedisRateLimiter:
+    """Token bucket backed by Redis, API-compatible with RateLimiter.
+
+    Fails OPEN on any Redis error, like the in-process limiter: a limiter
+    that takes the login page down when its cache blips is a worse outage
+    than the abuse it prevents. Each failure is logged once per minute
+    rather than per request, so a Redis outage does not also produce a log
+    flood.
+    """
+
+    def __init__(self, client, rate_per_minute: int, burst: int, name: str):
+        self._client = client
+        self.rate_per_minute = rate_per_minute
+        self.burst = burst
+        self.name = name
+        self._script = None
+        self._last_error_log = 0.0
+
+    def _prepare(self):
+        if self._script is None:
+            self._script = self._client.register_script(_REFILL_AND_CONSUME)
+        return self._script
+
+    async def check(self, identity: str) -> None:
+        try:
+            script = self._prepare()
+            wait = float(
+                await script(
+                    keys=[f"aegisiq:rl:{self.name}:{identity}:t",
+                          f"aegisiq:rl:{self.name}:{identity}:s"],
+                    args=[self.rate_per_minute / 60.0, self.burst, time.time(),
+                          max(60, int(self.burst / max(self.rate_per_minute / 60.0, 1e-6)) * 2)],
+                )
+            )
+        except HTTPException:
+            raise
+        except Exception:  # noqa: BLE001 - never DoS ourselves
+            now = time.monotonic()
+            if now - self._last_error_log > 60:
+                self._last_error_log = now
+                logger.exception("redis rate-limiter %r failed; failing open", self.name)
+            return
+
+        if wait > 0:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    f"Too many requests. Try again in {int(wait) + 1}s. "
+                    "This limit exists to prevent credential stuffing "
+                    "against the authentication endpoint."
+                ),
+                headers={"Retry-After": str(int(wait) + 1)},
+            )
+
+    def reset(self, identity: str | None = None) -> None:  # pragma: no cover - test helper
+        """Best effort; used by the test suite only."""
+        try:
+            import asyncio
+
+            pattern = (f"aegisiq:rl:{self.name}:{identity}:*" if identity
+                       else f"aegisiq:rl:{self.name}:*")
+
+            async def _clear():
+                keys = [k async for k in self._client.scan_iter(match=pattern)]
+                if keys:
+                    await self._client.delete(*keys)
+
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(_clear())
+            else:
+                loop.run_until_complete(_clear())
+        except Exception:  # noqa: BLE001
+            logger.debug("redis limiter reset skipped", exc_info=True)
+
+
+_store_kind = "in_process"
+
+
+def store_kind() -> str:
+    """Which store the limiters are actually using — reported by /health."""
+    return _store_kind
+
+
+def install_shared_store() -> str:
+    """Swap the module-level limiters onto Redis when REDIS_URL is set.
+
+    Called once at startup (app/main.py lifespan). Returns the store kind
+    actually in use so the caller can log it.
+    """
+    global auth_limiter, mutate_limiter, _store_kind
+
+    from app.config import get_settings
+
+    settings = get_settings()
+    url = (settings.REDIS_URL or "").strip()
+    if not url:
+        return _store_kind
+
+    try:
+        import redis.asyncio as redis_asyncio  # lazy: optional dependency
+    except ImportError:
+        logger.warning(
+            "REDIS_URL is set but the redis package is not installed — "
+            "falling back to in-process rate limiting. Install it with: "
+            "pip install 'redis>=5.0'"
+        )
+        return _store_kind
+
+    try:
+        client = redis_asyncio.from_url(url, decode_responses=True)
+    except Exception:  # noqa: BLE001
+        logger.exception("could not connect to REDIS_URL; using in-process rate limiting")
+        return _store_kind
+
+    auth_limiter = RedisRateLimiter(
+        client, settings.RATE_LIMIT_AUTH_PER_MINUTE, settings.RATE_LIMIT_AUTH_BURST, "auth")
+    mutate_limiter = RedisRateLimiter(client, 60, 20, "mutate")
+    _store_kind = "redis"
+    return _store_kind
+
+
 def _identity(request: Request) -> str:
     """Bucket key for this caller.
 
@@ -135,7 +301,11 @@ def _identity(request: Request) -> str:
 
 
 async def enforce_auth(request: Request) -> None:
-    """Dependency alias for the auth-login route."""
+    """Dependency alias for the auth-login route.
+
+    Reads the module global at call time so install_shared_store() can swap
+    in the Redis-backed limiter after the routes are already bound.
+    """
     await auth_limiter.check(_identity(request))
 
 
