@@ -1,4 +1,10 @@
-# AegisIQ — Security Posture (v2.3)
+# AegisIQ — Security Posture (v3.2)
+
+> v3.2 added the accreditation controls listed below (account lockout,
+> session revocation, account disable, trusted-source-IP derivation,
+> bounded uploads) and closed the findings in
+> **`docs/SECURITY_AUDIT_v32.md`** — read that document for the "what was
+> wrong and why it mattered" version of the same material.
 
 This document is the reference for every security control AegisIQ
 ships. It exists so a security review can confirm what is claimed
@@ -15,6 +21,14 @@ matches what is running — with a file path for every claim.
 | Session tokens | JWT (HS256), 60 min default | `app/auth/security.py::create_access_token` |
 | No username enumeration | Same 401 for wrong password and unknown user | `app/api/routes/auth.py::login` |
 | Login rate limit | Token bucket, 10 req/min per source IP, burst 5 | `app/security/rate_limit.py` |
+| Account lockout (v3.2) | 5 consecutive failures → 15-minute lock, same 401 body as a wrong password, audited (NIST AC-7) | `app/security/lockout.py` |
+| Trusted source address (v3.2) | `X-Forwarded-For` honoured only behind a declared proxy, parsed as an IP (NIST SI-10/AU-3) | `app/security/net.py` |
+| Session revocation (v3.2) | `token_version` claim; a password change invalidates every token already issued (NIST AC-12) | `app/auth/security.py`, `app/auth/dependencies.py` |
+| Account disable (v3.2) | `is_active=false` refuses login, REST and WebSocket, without deleting audit history (NIST AC-2) | `app/models/user.py`, `app/auth/dependencies.py` |
+| Token issuer/audience (v3.2) | `iss`/`aud`/`iat`/`nbf`/`jti` stamped and verified; algorithm pinned | `app/auth/security.py` |
+| MFA on every channel (v3.2) | The live WebSocket refuses pre-second-factor challenge tokens | `app/api/routes/stream.py` |
+| Upload ceiling (v3.2) | Streamed read, 413 past `MAX_UPLOAD_MB` (NIST SC-5) | `app/api/routes/analysis.py` |
+| Session-end UX (v3.2) | Any unexpected 401 signs the console out with an explanation | `frontend/src/api/client.ts` |
 | Idle timeout (client) | 15 min, cross-tab, warning at < 2 min | `frontend/src/security.ts` |
 | Pre-expiry logout (client) | 30 s before JWT exp | `frontend/src/security.ts` |
 | RBAC | administrator vs security_analyst | `app/auth/dependencies.py::require_role` |
@@ -188,7 +202,8 @@ of problem occurred from the status code alone.
 ## Verifying the posture
 
 ```bash
-python scripts/smoke_test.py
+cd backend && python -m pytest -q     # 170 tests
+cd .. && python scripts/smoke_test.py # 34 end-to-end checks
 ```
 
 The v2.0 smoke test includes 24 checks. Every claim in this document

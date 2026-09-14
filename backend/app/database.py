@@ -7,6 +7,11 @@ models or routes -- so swapping DATABASE_URL to a PostgreSQL DSN later
 (e.g. postgresql+psycopg://...) requires no code changes, only adding
 the driver to requirements.txt.
 """
+import os
+import stat
+from pathlib import Path
+from urllib.parse import urlparse
+
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base, sessionmaker
 
@@ -20,6 +25,30 @@ if _is_sqlite:
     # Required for SQLite when accessed from multiple threads (FastAPI's
     # default threaded request handling).
     connect_args = {"check_same_thread": False}
+
+
+def _sqlite_path(url: str) -> Path | None:
+    """Absolute filesystem path behind a sqlite:// URL, or None for :memory:."""
+    if not url.startswith("sqlite"):
+        return None
+    raw = urlparse(url).path or ""
+    # sqlite:///relative/x.db -> "/relative/x.db"; sqlite:////abs/x.db -> "//abs/x.db"
+    raw = raw.lstrip("/") if not raw.startswith("//") else raw[1:]
+    if not raw or ":memory:" in url:
+        return None
+    return Path(raw).resolve()
+
+
+# Fresh-clone bootstrap. The data/ directory is gitignored, so a clone has
+# no such directory and SQLite fails opaquely with "unable to open database
+# file" before the app can say anything useful. Create it (0700) up front.
+_db_path = _sqlite_path(settings.DATABASE_URL)
+if _db_path is not None:
+    _db_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(_db_path.parent, stat.S_IRWXU)     # rwx------
+    except OSError:  # pragma: no cover - non-POSIX or restricted filesystem
+        pass
 
 # Connection pool sizing.
 #
@@ -71,6 +100,16 @@ if _is_sqlite:
             cursor.execute("PRAGMA foreign_keys=ON")
         finally:
             cursor.close()
+        # Least privilege on the database file itself: the SIEM stores
+        # credentials, MFA material and audit records, so no group/other
+        # access (NIST SP 800-53 AC-6, CIS Benchmark file-permission
+        # guidance). Best effort -- ignored on filesystems without POSIX
+        # modes (Windows hosts, some bind mounts).
+        if _db_path is not None:
+            try:
+                os.chmod(_db_path, stat.S_IRUSR | stat.S_IWUSR)  # rw-------
+            except OSError:  # pragma: no cover
+                pass
 
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

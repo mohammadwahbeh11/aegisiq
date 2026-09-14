@@ -45,10 +45,22 @@
       Deliberately no CDN <script>/<link> tags. Everything ships in
       the Vite bundle, so the console renders on an isolated lab
       network with no internet access.
+
+      v3.2: three Google Fonts tags had been added below this comment,
+      which contradicted it twice over. The console's own CSP above is
+      style-src 'self', so the browser refused the stylesheet and logged
+      a violation on every page load — the fonts never arrived. And in
+      an air-gapped SOC (the deployment this project sells itself on)
+      the request itself is the problem: an outbound call to a third
+      party on every console load, from the box that is supposed to be
+      watching for exactly that. The font stack in
+      src/styles/aegisiq_design_v2.css names Inter and JetBrains Mono
+      first and falls back to the platform UI and mono faces, so the
+      typography is unchanged where those fonts are installed and
+      correct everywhere else. To pin the exact faces, self-host the
+      .woff2 files under public/fonts/ and @font-face them — that keeps
+      both the CSP and the air gap intact.
     -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 </head>
   <body>
     <div id="root"></div>

@@ -27,6 +27,7 @@ import hmac
 import json
 import logging
 import threading
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -64,6 +65,22 @@ def dispatch(action_payload: dict[str, Any]) -> None:
     url = (settings.SOAR_WEBHOOK_URL or "").strip()
     if not url:
         return
+    # urllib happily opens file:// and ftp:// — a mistyped or tampered
+    # environment variable would then make the SIEM read local files (or
+    # write them, on some handlers) on every containment action. Only
+    # http(s) is a webhook. (NIST SP 800-53 SI-10; CWE-918.)
+    scheme = urllib.parse.urlparse(url).scheme.lower()
+    if scheme not in ("http", "https"):
+        logger.error(
+            "SOAR_WEBHOOK_URL has unsupported scheme %r — refusing to dispatch. "
+            "Use http:// or https://.", scheme or "(none)",
+        )
+        return
+    if scheme == "http" and settings.is_production:
+        logger.warning(
+            "SOAR webhook is plain HTTP in production — the action payload "
+            "and its HMAC signature cross the network in the clear."
+        )
     secret = settings.SOAR_WEBHOOK_SECRET or ""
     timeout = settings.SOAR_WEBHOOK_TIMEOUT_SECONDS
     envelope = {

@@ -110,37 +110,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(copilot.router)
-app.include_router(rules_api.router)
-app.include_router(enrichment.router)
-app.include_router(rules_api.router)
-app.include_router(compliance.router)
-app.include_router(rules_api.router)
-app.include_router(health.router)
-app.include_router(rules_api.router)
-app.include_router(auth.router)
-app.include_router(rules_api.router)
-app.include_router(mfa.router)            # v2.3 MFA enrolment/management
-app.include_router(agents.router)
-app.include_router(rules_api.router)
-app.include_router(dashboard.router)
-app.include_router(rules_api.router)
-app.include_router(logs.router)
-app.include_router(rules_api.router)
-app.include_router(alerts.router)
-app.include_router(rules_api.router)
-app.include_router(rules.router)
-app.include_router(rules_api.router)
-app.include_router(soar.router)
-app.include_router(rules_api.router)
-app.include_router(integrations.router)
-app.include_router(rules_api.router)
-app.include_router(retention.router)
-app.include_router(rules_api.router)
-app.include_router(audit.router)          # v2.0
-app.include_router(analysis.router)       # v2.1 premium
-app.include_router(analysis.license_router)  # v2.1 license API
-app.include_router(simulation.router)
-app.include_router(rules_api.router)
-app.include_router(stream.router)
-app.include_router(rules_api.router)
+# Routers. One registration each — until v3.2 `rules_api.router` was
+# included fifteen times (a copy-paste that grew with every release),
+# which duplicated every one of its operations in the OpenAPI schema and
+# in the /docs page. FastAPI matches the first registration, so the
+# behaviour was unaffected; the generated contract was not.
+for _router in (
+    health.router,
+    auth.router,
+    mfa.router,              # v2.3 MFA enrolment/management
+    agents.router,
+    dashboard.router,
+    logs.router,
+    alerts.router,
+    rules.router,
+    rules_api.router,        # Sigma / community rule library
+    soar.router,
+    integrations.router,
+    retention.router,
+    audit.router,            # v2.0
+    analysis.router,         # v2.1 premium
+    analysis.license_router,  # v2.1 license API
+    simulation.router,
+    stream.router,
+    copilot.router,          # v2.5 AI copilot
+    enrichment.router,       # v2.5 threat-intel enrichment
+    compliance.router,       # v2.5 compliance evidence
+):
+    app.include_router(_router)

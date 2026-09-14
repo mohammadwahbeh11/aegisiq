@@ -28,6 +28,7 @@ from app.auth.security import decode_access_token
 from app.database import SessionLocal
 from app.models.user import User
 from app.realtime.hub import EVENT_HELLO, hub
+from app.security import lockout
 
 logger = logging.getLogger(__name__)
 
@@ -37,17 +38,41 @@ WS_POLICY_VIOLATION = 1008
 
 
 def _authenticate(token: str | None) -> User | None:
+    """Authenticate the socket handshake with exactly the same rules the
+    REST dependency applies.
+
+    v3.2 — this used to accept ANY signature-valid token, which meant the
+    short-lived ``mfa_pending`` challenge token (issued after the password
+    step but *before* the second factor) opened the live alert stream: a
+    stolen password alone was enough to watch the SOC in real time, with
+    MFA bypassed. The socket now rejects challenge tokens, disabled
+    accounts, locked accounts and superseded token versions.
+    """
     if not token:
         return None
     payload = decode_access_token(token)
     if payload is None or "sub" not in payload:
         return None
 
+    # Challenge tokens authorise /api/auth/mfa/verify and /api/mfa/enroll
+    # — never a data channel.
+    if payload.get("mfa_pending"):
+        return None
+
     # A short-lived session of its own: the socket may stay open for a
     # long time, but the user lookup happens once, at connect.
     db = SessionLocal()
     try:
-        return db.query(User).filter(User.username == payload["sub"]).first()
+        user = db.query(User).filter(User.username == payload["sub"]).first()
+        if user is None:
+            return None
+        if not getattr(user, "is_active", True):
+            return None
+        if int(payload.get("ver", 1)) != int(getattr(user, "token_version", 1) or 1):
+            return None
+        if lockout.is_locked(user):
+            return None
+        return user
     finally:
         db.close()
 

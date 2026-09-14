@@ -37,6 +37,30 @@ def get_current_user(
     user = db.query(User).filter(User.username == payload["sub"]).first()
     if user is None:
         raise credentials_exception
+
+    # v3.2 — AC-2: a disabled account authenticates nowhere, even while
+    # it still holds an unexpired token.
+    if not getattr(user, "is_active", True):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account has been disabled.",
+        )
+
+    # v3.2 — AC-12 / IA-5(1): every token carries the user's
+    # token_version at mint time. A password change (or a forced
+    # sign-out) increments the column, so tokens issued before it stop
+    # validating immediately instead of living out their remaining TTL.
+    # Tokens minted before this claim existed are treated as version 1,
+    # matching the default column value.
+    if int(payload.get("ver", 1)) != int(getattr(user, "token_version", 1) or 1):
+        raise credentials_exception
+
+    # v3.2 — AC-7: a token issued before the account was locked must not
+    # outlive the lock.
+    from app.security import lockout  # local import: avoids an import cycle
+    if lockout.is_locked(user):
+        raise credentials_exception
+
     return user
 
 

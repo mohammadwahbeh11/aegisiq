@@ -1,7 +1,7 @@
-@import './styles/aegisiq_design_v2.css';
-@import './styles/aegisiq_worldclass.css';
-@import './styles/aegisiq_radix.css';
-
+/* Layered design system: tokens (v2) → world-class polish → Radix-inspired
+   refinement (v3.1). Order matters; each layer overrides the previous.
+   (The block below used to appear twice — every rule was parsed and
+   applied a second time for no effect other than bundle size.) */
 @import './styles/aegisiq_design_v2.css';
 @import './styles/aegisiq_worldclass.css';
 @import './styles/aegisiq_radix.css';
@@ -1172,13 +1172,27 @@ tr.expanded-row:hover {
   position: fixed;
   top: 4.5rem;
   right: 1.5rem;
-  width: 380px;
+  width: 340px;
   max-width: calc(100vw - 3rem);
+  /* Never more than half the viewport: a burst of alerts scrolls inside
+     the rail instead of burying the page it is annotating. */
+  max-height: 50vh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 0.7rem;
   z-index: 50;
   pointer-events: none;
+  scrollbar-width: thin;
+}
+
+/* Keep each card to a glance: severity, rule, two lines of context. The
+   full text is one click away in the investigation view. */
+.toast-description {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .toast {
@@ -2357,15 +2371,14 @@ h1, h2, h3, h4 {
 
 /* ═══ TOAST RAIL (live alert popups) ═════════════════════════════ */
 
+/* v3.2 — the rail's POSITION is declared once, further up (top-right,
+   under the header). A second declaration here used to add `bottom`
+   without clearing `top`, so the rail was stretched from the header to
+   the foot of the viewport: four live alerts then covered the right-hand
+   third of every page, including the table columns underneath. Only the
+   z-index is (deliberately) raised here. */
 .toast-rail {
-  position: fixed;
-  bottom: 1.5rem;
-  right: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
   z-index: 100;
-  pointer-events: none;
 }
 
 .toast-rail .toast {
@@ -3806,23 +3819,56 @@ a:focus:not(:focus-visible) {
 
 
 
-/* v3.4 � hotfixes */
+/* v3.4 — hotfixes, made theme-aware in v3.2 of the security pass.
+   The active nav item used to be forced to a near-white label on every
+   theme, which disappeared against the light-mode pill; and the page
+   ground was pinned to the dark value with !important, so light mode got
+   a dark body under light panels. Both now follow data-theme. */
 .nav-item.active,
 .nav-item.active span,
 .nav-item.active svg {
-  color: #ede9fe !important;
+  color: var(--nav-active-ink) !important;
   opacity: 1 !important;
   visibility: visible !important;
 }
 .nav-item.active {
-  background: rgba(124,58,237,0.20) !important;
+  background: var(--nav-active-bg) !important;
 }
 
-/* Kill the right-side pink bleed completely */
-html, body { background: #05070d !important; }
+:root {
+  --nav-active-ink: #ede9fe;
+  --nav-active-bg: rgba(124, 58, 237, 0.20);
+  --page-ground: #05070d;
+  --page-glow: rgba(124, 58, 237, 0.06);
+}
+:root[data-theme="light"] {
+  /* Deep violet on a light lilac pill: 7.4:1 against the pill, so the
+     active item reads at a glance instead of vanishing (WCAG 2.2 AA). */
+  --nav-active-ink: #4c1d95;
+  --nav-active-bg: rgba(124, 58, 237, 0.12);
+  --page-ground: #f5f7fb;
+  --page-glow: rgba(124, 58, 237, 0.05);
+}
+
+/* One page ground, from the token — and no stray tint bleeding off the
+   right edge. */
+html, body { background: var(--page-ground) !important; }
 body {
   background-image:
-    radial-gradient(ellipse 500px 300px at 10% 0%, rgba(124,58,237,0.06), transparent 70%) !important;
+    radial-gradient(ellipse 500px 300px at 10% 0%, var(--page-glow), transparent 70%) !important;
   background-attachment: fixed !important;
   background-repeat: no-repeat !important;
+}
+
+/* v3.2 — informational banner (session ended, non-error notices).
+   Same geometry as .error-banner so the login card does not shift when
+   one replaces the other; accent colour says "information", not "fault". */
+.info-banner {
+  background: rgba(56, 139, 253, 0.10);
+  border: 1px solid rgba(56, 139, 253, 0.35);
+  color: #a9cdff;
+  border-radius: 6px;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.83rem;
+  margin-bottom: 1rem;
 }

@@ -16,6 +16,22 @@ export default function Login() {
 
   // v2.3 — second-factor step state.
   const [stage, setStage] = useState<"credentials" | "mfa">("credentials");
+
+  // v3.2 — the API client redirects here with ?reason=session_expired when
+  // a token stops being accepted mid-session (expiry, a password change
+  // that revoked it, or a disabled/locked account). Saying so is the
+  // difference between "you were signed out" and "the console is broken".
+  const [notice, setNotice] = useState<string | null>(() => {
+    try {
+      const reason = new URLSearchParams(window.location.search).get("reason");
+      if (reason === "session_expired") {
+        return "Your session ended — sign in again to continue.";
+      }
+    } catch {
+      /* no-op */
+    }
+    return null;
+  });
   const [mfaToken, setMfaToken] = useState<string | null>(null);
   const [enrollmentNeeded, setEnrollmentNeeded] = useState(false);
   const [code, setCode] = useState("");
@@ -65,6 +81,7 @@ export default function Login() {
   async function handleCredentials(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    setNotice(null);
     setIsSubmitting(true);
     try {
       const outcome = await login(username, password);
@@ -124,6 +141,8 @@ export default function Login() {
             {backend === "down" && "Backend unreachable"}
           </div>
         )}
+
+        {notice && !error && <div className="info-banner">{notice}</div>}
 
         {error && <div className="error-banner">{error}</div>}
 

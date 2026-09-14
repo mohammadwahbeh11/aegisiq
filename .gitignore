@@ -1,4 +1,4 @@
-﻿# Local backup files
+# Local backup files
 *.v*-backup
 *.backup
 *.bak
@@ -26,3 +26,19 @@ node_modules/
 dist/
 build/
 .env.local
+
+# Runtime data. The SIEM database holds password hashes, MFA secrets and
+# the audit trail: one `git add -A` from a developer's machine would
+# publish all of it. Never tracked. (v3.2 audit finding #14 — the
+# database WAS committable before this rule existed.)
+data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Build artefacts that a build regenerates
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts

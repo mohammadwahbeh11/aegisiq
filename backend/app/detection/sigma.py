@@ -263,7 +263,95 @@ def _match_selection(sel, event_fields: dict, raw_log: str) -> bool:
     return str(sel).lower() in raw_log.lower()
 
 
-_ALLOWED_COND_TOKENS = re.compile(r"[A-Za-z0-9_ ()]+")
+# ── Condition evaluation ────────────────────────────────────────────
+#
+# v3.2 — this used to finish with ``eval(substituted, {"__builtins__":
+# {}}, {})``. The input reaching it is a *Sigma rule condition*, and
+# Sigma rules are exactly the thing this project invites an operator to
+# drop in from outside: `sigma_rules/*.yml` and, via /api/rules/sync, a
+# tarball pulled from the public SigmaHQ repository. Sanitising a string
+# and then handing it to the interpreter is a pattern no security review
+# passes, and "the regex covers it" is an argument that only has to be
+# wrong once. A detection engine that can be talked into executing its
+# own rule content is a worse hole than the attacks it looks for.
+#
+# It is replaced by a small recursive-descent parser over a fixed token
+# set. It cannot execute anything: the only values it ever produces are
+# booleans, and an unrecognised token aborts the parse.
+
+_COND_TOKEN = re.compile(r"\(|\)|\b(?:and|or|not)\b|True|False", re.IGNORECASE)
+
+
+class _CondSyntaxError(Exception):
+    """Raised on any token the grammar does not accept."""
+
+
+def _tokenize_condition(expr: str) -> list[str]:
+    tokens: list[str] = []
+    pos = 0
+    while pos < len(expr):
+        char = expr[pos]
+        if char.isspace():
+            pos += 1
+            continue
+        match = _COND_TOKEN.match(expr, pos)
+        if not match:
+            raise _CondSyntaxError(f"unexpected character {char!r} at {pos}")
+        text = match.group(0)
+        tokens.append(text if text in ("(", ")") else text.lower())
+        pos = match.end()
+    return tokens
+
+
+def _parse_or(tokens: list[str], i: int) -> tuple[bool, int]:
+    value, i = _parse_and(tokens, i)
+    while i < len(tokens) and tokens[i] == "or":
+        right, i = _parse_and(tokens, i + 1)
+        value = value or right
+    return value, i
+
+
+def _parse_and(tokens: list[str], i: int) -> tuple[bool, int]:
+    value, i = _parse_not(tokens, i)
+    while i < len(tokens) and tokens[i] == "and":
+        right, i = _parse_not(tokens, i + 1)
+        value = value and right
+    return value, i
+
+
+def _parse_not(tokens: list[str], i: int) -> tuple[bool, int]:
+    if i < len(tokens) and tokens[i] == "not":
+        value, i = _parse_not(tokens, i + 1)
+        return (not value), i
+    return _parse_atom(tokens, i)
+
+
+def _parse_atom(tokens: list[str], i: int) -> tuple[bool, int]:
+    if i >= len(tokens):
+        raise _CondSyntaxError("unexpected end of condition")
+    token = tokens[i]
+    if token == "(":
+        value, i = _parse_or(tokens, i + 1)
+        if i >= len(tokens) or tokens[i] != ")":
+            raise _CondSyntaxError("unbalanced parentheses")
+        return value, i + 1
+    if token == "true":
+        return True, i + 1
+    if token == "false":
+        return False, i + 1
+    raise _CondSyntaxError(f"unexpected token {token!r}")
+
+
+def _eval_boolean_expression(expr: str) -> bool:
+    """Evaluate a boolean expression built only from True/False, and/or/
+    not and parentheses. No interpreter, no builtins, no side effects."""
+    tokens = _tokenize_condition(expr)
+    if not tokens:
+        raise _CondSyntaxError("empty condition")
+    value, i = _parse_or(tokens, 0)
+    if i != len(tokens):
+        raise _CondSyntaxError("trailing tokens in condition")
+    return value
 
 
 def _evaluate_condition(condition: str, selection_results: dict[str, bool]) -> bool:
@@ -294,7 +382,7 @@ def _evaluate_condition(condition: str, selection_results: dict[str, bool]) -> b
     # Substitute each known selection name with its boolean.
     def _name_repl(m: re.Match) -> str:
         name = m.group(0)
-        if name in ("and", "or", "not", "True", "False"):
+        if name.lower() in ("and", "or", "not", "true", "false"):
             return name
         if name in selection_results:
             return "True" if selection_results[name] else "False"
@@ -304,12 +392,13 @@ def _evaluate_condition(condition: str, selection_results: dict[str, bool]) -> b
     substituted = re.sub(r"[A-Za-z_][A-Za-z0-9_]*", _name_repl, cond)
     if "__UNKNOWN__" in substituted:
         return False
-    if not _ALLOWED_COND_TOKENS.fullmatch(substituted):
-        return False
     try:
-        # Safe: only True/False/and/or/not/parens remain after sanitising.
-        return bool(eval(substituted, {"__builtins__": {}}, {}))  # noqa: S307
-    except Exception:  # noqa: BLE001
+        return _eval_boolean_expression(substituted)
+    except _CondSyntaxError as exc:
+        logger.debug("unparseable Sigma condition %r: %s", condition, exc)
+        return False
+    except Exception:  # noqa: BLE001 - a bad rule never breaks detection
+        logger.debug("failed to evaluate Sigma condition %r", condition)
         return False
 
 

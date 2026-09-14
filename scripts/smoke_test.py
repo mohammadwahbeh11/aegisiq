@@ -520,8 +520,8 @@ def main() -> int:
         _, health = http("GET", f"{base}/health")
         expect(health.get("product") == "AegisIQ",
                f"expected product AegisIQ, got {health.get('product')}")
-        expect(health.get("version", "").startswith("2."),
-               f"expected version 2.x, got {health.get('version')}")
+        expect(bool(re.match(r"^\d+\.\d+", health.get("version", ""))),
+               f"expected a semantic version, got {health.get('version')}")
         expect("security" in health, "health missing 'security' block")
         sec = health["security"]
         expect(sec.get("security_headers") == "active", f"headers status wrong: {sec}")

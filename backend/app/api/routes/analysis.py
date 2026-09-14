@@ -36,6 +36,7 @@ from app.config import get_settings
 from app.models.analysis import AnalysisReport, AnalysisStatus
 from app.models.user import User, UserRole
 from app.security import audit
+from app.security.net import client_ip
 from app.security.license import require_feature, verify
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis (premium)"])
@@ -45,12 +46,14 @@ logger = logging.getLogger(__name__)
 ACT_ANALYSIS_UPLOAD = "analysis.upload"
 ACT_ANALYSIS_DELETE = "analysis.delete"
 
+# Read the upload in 1 MiB slices so the size check happens before the
+# whole body is resident in memory.
+_UPLOAD_CHUNK_BYTES = 1024 * 1024
+
 
 def _source_ip(request: Request) -> str | None:
-    fwd = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-    if fwd:
-        return fwd
-    return request.client.host if request.client else None
+    # v3.2 — single trusted implementation; see app/security/net.py.
+    return client_ip(request)
 
 
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
@@ -63,15 +66,46 @@ async def upload_and_analyze(
     """Upload a log file, run the analysis, return the created report."""
     license_status = require_feature("log_analysis", settings.PREMIUM_LICENSE_KEY)
 
-    raw = await file.read()
+    # SC-5 / ASVS V12.1 — bounded read.
+    #
+    # `await file.read()` (what this used to do) pulls the WHOLE upload
+    # into RAM before a single check runs: one authenticated analyst, or
+    # one stolen token, could post a multi-gigabyte body and take the SIEM
+    # down with it — on the very box that is supposed to notice the
+    # attack. The body is now streamed in fixed chunks and abandoned the
+    # moment it exceeds the configured ceiling.
+    max_bytes = max(1, settings.MAX_UPLOAD_MB) * 1024 * 1024
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(_UPLOAD_CHUNK_BYTES)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            await file.close()
+            audit.record(
+                db, action=ACT_ANALYSIS_UPLOAD, outcome="failure",
+                username=user.username, source_ip=_source_ip(request),
+                details={"reason": "file_too_large",
+                         "limit_mb": settings.MAX_UPLOAD_MB},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=(f"Uploaded file exceeds the {settings.MAX_UPLOAD_MB} MB "
+                        "limit for log analysis."),
+            )
+        chunks.append(chunk)
+    raw = b"".join(chunks)
+    del chunks
+
     if not raw:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Uploaded file is empty.",
         )
-    if len(raw) > analysis_engine.MAX_BYTES:
-        # We DO accept the file but truncate; the report says so.
-        pass
+    # Files under the hard ceiling but over the engine's analysis window
+    # are still accepted and truncated — the report states that plainly.
 
     filename = file.filename or "unnamed.log"
 
@@ -108,9 +142,13 @@ async def upload_and_analyze(
         report_row.finished_at = datetime.now(timezone.utc)
         db.commit()
         logger.exception("analysis failed for report %s", report_row.id)
+        # ASVS V7.4.1 — the exception text can carry file paths, SQL
+        # fragments and library internals. It stays in the server log and
+        # on the report row; the caller gets a stable reference instead.
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Analysis failed: {exc}",
+            detail=(f"Analysis failed for report {report_row.id}. "
+                    "The details were recorded in the server log."),
         )
 
     return _serialize(report_row)

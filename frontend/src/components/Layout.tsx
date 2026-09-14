@@ -314,7 +314,7 @@ export default function Layout() {
         ))}
 
         <div style={{ marginTop: "auto", padding: "16px 10px 4px", fontSize: 10, color: "var(--ink-tertiary)" }}>
-          <div>v3.0 · {new Date().getFullYear()} AegisIQ</div>
+          <div>v3.2 · {new Date().getFullYear()} AegisIQ</div>
           <div>Idle logout in {Math.max(0, Math.floor(idle / 60))}m {Math.max(0, idle % 60)}s</div>
         </div>
       </aside>

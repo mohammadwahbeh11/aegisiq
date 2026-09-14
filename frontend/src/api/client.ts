@@ -59,6 +59,50 @@ apiClient.interceptors.request.use((config) => {
 });
 
 /**
+ * v3.2 — one place that reacts to "this session is over".
+ *
+ * The backend can now end a session *while the tab is open*: a password
+ * change revokes every token issued earlier (AC-12), an administrator can
+ * disable an account (AC-2), and a locked account stops authenticating
+ * (AC-7) — on top of ordinary JWT expiry. Without this interceptor the
+ * console stayed on screen and every panel quietly filled with error
+ * banners, which reads as "the SIEM is broken" rather than "you were
+ * signed out".
+ *
+ * 401 => the credential is no longer valid: drop it and return to the
+ * login screen. 403 is deliberately NOT treated this way — that is a
+ * valid session lacking a role, which the page should render as such.
+ */
+let redirectingToLogin = false;
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+    const url: string = error?.config?.url ?? "";
+    // The login endpoints answer 401 for "wrong password"; that is the
+    // form's business, not a session expiry.
+    const isAuthAttempt = url.includes("/api/auth/login") || url.includes("/api/auth/mfa/verify");
+    if (status === 401 && !isAuthAttempt && getToken() && !redirectingToLogin) {
+      redirectingToLogin = true;
+      clearToken();
+      try {
+        localStorage.removeItem("aegisiq_user");
+      } catch {
+        /* storage disabled — the redirect below still signs the user out */
+      }
+      const target = "/login?reason=session_expired";
+      if (window.location.pathname !== "/login") {
+        window.location.assign(target);
+      } else {
+        redirectingToLogin = false;
+      }
+    }
+    return Promise.reject(error);
+  },
+);
+
+/**
  * The WebSocket URL for the live stream, derived from the same base URL
  * as the REST calls so a deployment only has to configure VITE_API_URL
  * once (http -> ws, https -> wss). A relative VITE_API_URL falls back to

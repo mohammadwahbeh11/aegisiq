@@ -27,14 +27,15 @@ from app.models.mfa import MfaStatus, UserMFA
 from app.models.user import User
 from app.security import audit, crypto, totp
 from app.security.mfa_service import get_mfa
+from app.security.net import client_ip
 
 router = APIRouter(prefix="/api/mfa", tags=["mfa"])
 settings = get_settings()
 
 
 def _source_ip(request: Request) -> str | None:
-    fwd = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-    return fwd or (request.client.host if request.client else None)
+    # v3.2 — single trusted implementation; see app/security/net.py.
+    return client_ip(request)
 
 
 class MfaStatusResponse(BaseModel):

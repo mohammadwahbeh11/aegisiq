@@ -121,14 +121,17 @@ mutate_limiter = RateLimiter(rate_per_minute=60, burst=20, name="mutate")
 
 
 def _identity(request: Request) -> str:
-    """Prefer the forwarded client IP so a shared proxy doesn't collapse
-    everyone into one bucket; fall back to the socket peer."""
-    fwd = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-    if fwd:
-        return fwd
-    if request.client is not None:
-        return request.client.host
-    return "unknown"
+    """Bucket key for this caller.
+
+    v3.2 — this used to read X-Forwarded-For unconditionally, so an
+    attacker could send a different forged value on every request and
+    never exhaust a bucket: the limiter protected nothing against the one
+    adversary it exists for. app/security/net.py honours the header only
+    when the operator declares a reverse proxy in front
+    (TRUST_PROXY_HEADERS), and validates it as an IP address.
+    """
+    from app.security.net import rate_limit_identity  # local: avoids a cycle
+    return rate_limit_identity(request)
 
 
 async def enforce_auth(request: Request) -> None:

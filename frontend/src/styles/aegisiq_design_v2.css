@@ -20,6 +20,25 @@
   --bg-elevated-1:     #0b0e17;              /* sidebar, cards */
   --bg-elevated-2:     #10141f;              /* modals, tooltips */
   --bg-input:          #0c0f18;
+
+  /* v3.2 — SURFACE tokens.
+     The "glass" surfaces in aegisiq_worldclass.css and the Radix panel
+     override used to hardcode near-black rgba() values. Those ignored
+     data-theme entirely, so light mode rendered dark panels with dark
+     text: the whole console was unreadable for anyone whose OS is set to
+     light (the default on most laptops). Every translucent surface now
+     routes through these, and the light block below redefines them. */
+  --surface-panel:     rgba(11,14,23,0.70);
+  --surface-kpi:       rgba(11,14,23,0.60);
+  --surface-modal:     rgba(16,20,31,0.98);
+  --surface-sidebar-a: rgba(11,14,23,0.98);
+  --surface-sidebar-b: rgba(5,7,13,0.98);
+  --surface-scrim:     rgba(0,0,0,0.55);
+  /* Top sheen laid over a surface, and the hairline that edges it. */
+  --surface-sheen:     rgba(255,255,255,0.03);
+  --surface-sheen-2:   rgba(255,255,255,0.08);
+  --hairline:          rgba(255,255,255,0.06);
+  --hairline-strong:   rgba(255,255,255,0.14);
   --bg-hover:          rgba(255,255,255,0.04);
   --bg-active:         rgba(124,58,237,0.12);
   --border-subtle:     rgba(255,255,255,0.06);
@@ -94,6 +113,20 @@
   --shadow-sm:         0 1px 2px rgba(15,23,42,0.06);
   --shadow:            0 4px 16px -4px rgba(15,23,42,0.10);
   --shadow-lg:         0 20px 60px -20px rgba(15,23,42,0.18);
+
+  /* v3.2 — the light counterparts of the surface tokens above. Panels
+     become white cards on a pale ground, the sheen inverts to a faint
+     shadow, and hairlines become dark-on-light instead of invisible. */
+  --surface-panel:     #ffffff;
+  --surface-kpi:       #ffffff;
+  --surface-modal:     #ffffff;
+  --surface-sidebar-a: #ffffff;
+  --surface-sidebar-b: #f4f6fb;
+  --surface-scrim:     rgba(15,23,42,0.35);
+  --surface-sheen:     rgba(15,23,42,0.015);
+  --surface-sheen-2:   rgba(15,23,42,0.05);
+  --hairline:          rgba(15,23,42,0.10);
+  --hairline-strong:   rgba(15,23,42,0.18);
 }
 
 /* --------------------------------------------------------------------------

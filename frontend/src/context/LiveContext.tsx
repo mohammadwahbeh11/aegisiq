@@ -59,8 +59,12 @@ const LiveContext = createContext<LiveContextValue | undefined>(undefined);
 const MAX_LIVE_LOGS = 100;
 const MAX_LIVE_ALERTS = 50;
 const MAX_LIVE_SOAR = 50;
-const MAX_TOASTS = 4;
-const TOAST_DISMISS_MS = 12000;
+// Three is what fits beside the console without hiding it (the rail is
+// capped at 50vh and clamps each description to two lines); twelve
+// seconds of a stack that size was long enough to obscure a table the
+// analyst was reading.
+const MAX_TOASTS = 3;
+const TOAST_DISMISS_MS = 9000;
 
 // Keepalive for the alert socket. A deployed console sits behind a proxy
 // (Render/Cloudflare) that closes a WebSocket which has carried no traffic

@@ -38,9 +38,9 @@ body {
 /* --- 2. Sidebar polish --------------------------------------------- */
 .sidebar {
   background: linear-gradient(180deg,
-    rgba(11,14,23,0.98) 0%,
-    rgba(5,7,13,0.98) 100%);
-  border-right: 1px solid rgba(255,255,255,0.05);
+    var(--surface-sidebar-a) 0%,
+    var(--surface-sidebar-b) 100%);
+  border-right: 1px solid var(--hairline);
   box-shadow: 1px 0 20px rgba(0,0,0,0.30);
 }
 .sidebar .brand,
@@ -76,27 +76,27 @@ body {
   background: color-mix(in srgb, var(--bg-app) 88%, transparent);
   backdrop-filter: saturate(180%) blur(16px);
   -webkit-backdrop-filter: saturate(180%) blur(16px);
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid var(--hairline);
   padding: 12px 32px;
 }
 .top-bar .search-shortcut {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 6px 12px; min-width: 240px;
   background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid var(--surface-sheen-2);
   border-radius: 8px;
   color: var(--ink-tertiary); font-size: 13px;
   cursor: pointer;
   transition: all 140ms var(--ease-out);
 }
 .top-bar .search-shortcut:hover {
-  background: rgba(255,255,255,0.06);
-  border-color: rgba(255,255,255,0.14);
+  background: var(--hairline);
+  border-color: var(--hairline-strong);
   color: var(--ink-secondary);
 }
 .top-bar .search-shortcut kbd {
   margin-left: auto;
-  background: rgba(255,255,255,0.06);
+  background: var(--hairline);
   padding: 1px 6px; border-radius: 4px;
   font-size: 10.5px;
 }
@@ -110,7 +110,7 @@ body {
   transition: all 140ms var(--ease-out);
 }
 .top-bar .icon-btn:hover {
-  background: rgba(255,255,255,0.05);
+  background: var(--hairline);
   border-color: rgba(255,255,255,0.10);
   color: var(--ink-primary);
 }
@@ -135,7 +135,7 @@ body {
   background: linear-gradient(135deg, rgba(16,185,129,0.16), rgba(16,185,129,0.06));
   border: 1px solid rgba(16,185,129,0.30);
   color: #6ee7b7;
-  box-shadow: 0 0 0 0 rgba(16,185,129,0.20), inset 0 1px 0 rgba(255,255,255,0.05);
+  box-shadow: 0 0 0 0 rgba(16,185,129,0.20), inset 0 1px 0 var(--hairline);
 }
 .live-indicator::before {
   width: 8px; height: 8px;
@@ -146,11 +146,11 @@ body {
 /* --- 5. KPI cards — real depth + role-based tint ----------------- */
 .kpi-card {
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0)),
-    rgba(11,14,23,0.60);
+    linear-gradient(180deg, var(--surface-sheen), transparent),
+    var(--surface-kpi);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255,255,255,0.06);
+  border: 1px solid var(--hairline);
   padding: 18px;
   position: relative; overflow: hidden;
   transition: all 240ms var(--ease-out);
@@ -166,11 +166,11 @@ body {
 .kpi-card::after {
   content: "";
   position: absolute; top: 0; left: 0; right: 0; height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent);
+  background: linear-gradient(90deg, transparent, var(--hairline-strong), transparent);
 }
 .kpi-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(255,255,255,0.14);
+  border-color: var(--hairline-strong);
   box-shadow:
     0 20px 40px -20px rgba(0,0,0,0.60),
     0 0 40px -20px var(--kpi-glow, rgba(124,58,237,0.30));
@@ -215,11 +215,11 @@ body {
 /* --- 6. Panels — glass surface --------------------------------- */
 .panel, .card {
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)),
-    rgba(11,14,23,0.55);
+    linear-gradient(180deg, var(--surface-sheen), transparent),
+    var(--surface-panel);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,0.06);
+  border: 1px solid var(--hairline);
   border-radius: 14px;
   padding: 18px 20px;
   position: relative;
@@ -228,7 +228,7 @@ body {
   content: ""; position: absolute; inset: 0;
   border-radius: 14px;
   padding: 1px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.08), transparent);
+  background: linear-gradient(180deg, var(--surface-sheen-2), transparent);
   -webkit-mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
   -webkit-mask-composite: xor; mask-composite: exclude;
   pointer-events: none;
@@ -237,7 +237,7 @@ body {
 .panel-header {
   display: flex; justify-content: space-between; align-items: center;
   padding-bottom: 12px; margin-bottom: 14px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid var(--hairline);
 }
 .panel-header h2 {
   font-size: 14px; font-weight: 600;
@@ -247,7 +247,7 @@ body {
 .panel-header .subtle-count {
   font-size: 11px; color: var(--ink-tertiary);
   padding: 2px 8px; border-radius: 999px;
-  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.04); border: 1px solid var(--hairline);
   font-variant-numeric: tabular-nums;
 }
 
@@ -277,7 +277,7 @@ body {
 /* --- 8. Command palette (Cmd+K) --------------------------------- */
 .cmdk-overlay {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,0.55);
+  background: var(--surface-scrim);
   backdrop-filter: blur(4px);
   z-index: 100;
   display: flex; align-items: flex-start; justify-content: center;
@@ -286,7 +286,7 @@ body {
 }
 .cmdk-panel {
   width: min(560px, 92vw);
-  background: rgba(16,20,31,0.98);
+  background: var(--surface-modal);
   border: 1px solid rgba(255,255,255,0.10);
   border-radius: 16px;
   box-shadow: 0 40px 100px -20px rgba(0,0,0,0.60), 0 0 0 1px rgba(255,255,255,0.04) inset;
@@ -297,7 +297,7 @@ body {
   width: 100%; padding: 16px 20px;
   background: transparent; border: 0; outline: none;
   color: var(--ink-primary); font-size: 15px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid var(--hairline);
 }
 .cmdk-list { max-height: 60vh; overflow-y: auto; padding: 6px; }
 .cmdk-item {
@@ -346,7 +346,7 @@ body {
   background: linear-gradient(
     90deg,
     rgba(255,255,255,0.02) 0%,
-    rgba(255,255,255,0.06) 50%,
+    var(--hairline) 50%,
     rgba(255,255,255,0.02) 100%
   );
   background-size: 200% 100%;
@@ -371,7 +371,7 @@ body {
 }
 
 /* --- 13. Scrollbar — thin + branded --------------------------- */
-* { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.08) transparent; }
+* { scrollbar-width: thin; scrollbar-color: var(--surface-sheen-2) transparent; }
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
 *::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.20); background-clip: padding-box; }

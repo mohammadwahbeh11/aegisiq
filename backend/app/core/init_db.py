@@ -249,6 +249,18 @@ def _ensure_log_table_columns() -> None:
     this is a deliberately narrow, documented stand-in, not a general
     migration framework.
     """
+    # v3.2 accreditation columns on users (AC-2 / AC-7 / AC-12 / IA-5).
+    # Additive, so an existing demo database upgrades without losing data.
+    _ensure_columns(
+        "users",
+        {
+            "is_active": "BOOLEAN NOT NULL DEFAULT TRUE",
+            "failed_login_count": "INTEGER NOT NULL DEFAULT 0",
+            "locked_until": "DATETIME",
+            "token_version": "INTEGER NOT NULL DEFAULT 1",
+            "password_changed_at": "DATETIME",
+        },
+    )
     _ensure_columns(
         "logs",
         {

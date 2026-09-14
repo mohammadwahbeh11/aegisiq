@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     # General — v2.0 branding
     PROJECT_NAME: str = "AegisIQ"                          # commercial name
     PROJECT_TAGLINE: str = "Intelligent Shield SIEM & SOAR"
-    PROJECT_VERSION: str = "2.4.2"
+    PROJECT_VERSION: str = "3.2.0"
     ENV: str = "development"
 
     # Database. Absolute by default (see REPO_ROOT above) rather than the
@@ -176,6 +176,30 @@ class Settings(BaseSettings):
     # real executor can be plugged in later without changing the schema.
     SOAR_ENABLED: bool = True
     SOAR_EXECUTE: bool = False
+
+    # --- v3.2 accreditation controls (NIST SP 800-53 / DoD STIG / CIS) ---
+    # AC-7 "Unsuccessful Logon Attempts": after N consecutive failures a
+    # single ACCOUNT is locked for LOCKOUT_MINUTES, independently of the
+    # per-IP rate limit. The rate limiter alone is bypassed by a
+    # distributed attack (one attempt per source address); account
+    # lockout is what actually satisfies AC-7 / STIG APSC-DV-000110.
+    # 0 disables lockout (not recommended; dev convenience only).
+    LOCKOUT_THRESHOLD: int = 5
+    LOCKOUT_MINUTES: int = 15
+    # SC-5 / ASVS V12.1: hard ceiling on an uploaded log file. The
+    # analysis endpoint streams the body and refuses (413) past this,
+    # instead of reading an unbounded upload into memory.
+    MAX_UPLOAD_MB: int = 25
+    # AC-4 / SI-10: only trust X-Forwarded-For when this instance really
+    # is behind a reverse proxy that rewrites it. Left false, a client
+    # could spoof the header to evade the per-IP rate limit and to
+    # falsify the source address written into the audit trail.
+    TRUST_PROXY_HEADERS: bool = False
+    # IA-5 / AU-3: JWT issuer + audience, validated on every request so a
+    # token minted for another service (sharing the same secret by
+    # accident) cannot authenticate here.
+    JWT_ISSUER: str = "aegisiq"
+    JWT_AUDIENCE: str = "aegisiq-console"
 
     # --- Optional Wazuh integration ---
     # Left blank => the integration reports "not_configured" instead of

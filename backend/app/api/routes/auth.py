@@ -27,17 +27,19 @@ from app.schemas.auth import LoginRequest, LoginResult, MfaVerifyRequest, TokenR
 from app.security import audit
 from app.security.mfa_service import is_active, login_requires_second_factor, verify_code
 from app.security.password_policy import validate as validate_password
+from app.security.net import client_ip
 from app.security.rate_limit import enforce_auth
+from app.security import lockout
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 settings = get_settings()
 
 
 def _source_ip(request: Request) -> str | None:
-    fwd = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-    if fwd:
-        return fwd
-    return request.client.host if request.client else None
+    """v3.2 — see app/security/net.py. X-Forwarded-For is only honoured
+    behind a declared reverse proxy; otherwise a client could spoof it
+    to evade the rate limit and falsify the audit trail."""
+    return client_ip(request)
 
 
 @router.post("/login", response_model=LoginResult)
@@ -56,9 +58,41 @@ def login(
     src = _source_ip(request)
     user = db.query(User).filter(User.username == payload.username).first()
 
+    # AC-7 — a locked account is refused before the password is even
+    # checked, with the SAME body as a wrong password so the response
+    # cannot be used to discover which usernames exist or which are
+    # locked. The distinction lives in the audit trail.
+    if user is not None and lockout.is_locked(user):
+        audit.record(
+            db,
+            action=lockout.ACT_LOGIN_BLOCKED_LOCKED,
+            outcome="failure",
+            username=payload.username,
+            source_ip=src,
+            details={"reason": "account_locked",
+                     "seconds_remaining": lockout.seconds_remaining(user)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+        )
+
+    # AC-2 — a disabled account never authenticates, for any reason.
+    if user is not None and not user.is_active:
+        audit.record(
+            db, action=audit.ACT_LOGIN_FAILURE, outcome="failure",
+            username=payload.username, source_ip=src,
+            details={"reason": "account_disabled"},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+        )
+
     if user is None or not verify_password(payload.password, user.password_hash):
         # Same error for "user not found" and "wrong password" so the API
         # never reveals which usernames exist.
+        just_locked = lockout.register_failure(db, user) if user is not None else False
         audit.record(
             db,
             action=audit.ACT_LOGIN_FAILURE,
@@ -67,6 +101,16 @@ def login(
             source_ip=src,
             details={"reason": "invalid_credentials"},
         )
+        if just_locked:
+            audit.record(
+                db,
+                action=lockout.ACT_ACCOUNT_LOCKED,
+                outcome="failure",
+                username=payload.username,
+                source_ip=src,
+                details={"threshold": settings.LOCKOUT_THRESHOLD,
+                         "minutes": settings.LOCKOUT_MINUTES},
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -85,13 +129,16 @@ def login(
         return LoginResult(mfa_required=True, enrollment_required=True, mfa_token=challenge)
 
     # ── No second factor needed → full token, as in v2.0/2.1 ──────────
+    lockout.register_success(db, user)
     user.last_login = datetime.now(timezone.utc)
     db.commit()
     audit.record(
         db, action=audit.ACT_LOGIN_SUCCESS, outcome="success",
         username=user.username, source_ip=src, details={"role": user.role.value},
     )
-    token = create_access_token(subject=user.username, role=user.role.value)
+    token = create_access_token(
+        subject=user.username, role=user.role.value, token_version=user.token_version,
+    )
     return LoginResult(
         access_token=token, username=user.username, role=user.role,
     )
@@ -137,13 +184,16 @@ def mfa_verify(
     audit.record(db, action=audit.ACT_MFA_CHALLENGE_SUCCESS, outcome="success",
                  username=user.username, source_ip=src, details={"method": method})
 
+    lockout.register_success(db, user)
     user.last_login = datetime.now(timezone.utc)
     db.commit()
     audit.record(db, action=audit.ACT_LOGIN_SUCCESS, outcome="success",
                  username=user.username, source_ip=src,
                  details={"role": user.role.value, "mfa": method})
 
-    token = create_access_token(subject=user.username, role=user.role.value)
+    token = create_access_token(
+        subject=user.username, role=user.role.value, token_version=user.token_version,
+    )
     return TokenResponse(access_token=token, username=user.username, role=user.role)
 
 
@@ -202,14 +252,23 @@ def change_password(
         )
 
     user.password_hash = hash_password(payload.new_password)
+    # AC-12 / IA-5(1) — revoke every token minted before this change.
+    # Previously the old JWTs stayed valid for the rest of their TTL,
+    # which means changing a password after a suspected compromise did
+    # not actually evict the intruder. Bumping token_version does.
+    user.token_version = int(user.token_version or 1) + 1
+    user.password_changed_at = datetime.now(timezone.utc)
     db.commit()
 
     audit.record(db, action=audit.ACT_PASSWORD_CHANGE, outcome="success",
-                 username=user.username, source_ip=src)
+                 username=user.username, source_ip=src,
+                 details={"sessions_revoked": True,
+                          "token_version": user.token_version})
 
     return PasswordChangeResponse(
         ok=True,
-        detail="Password changed successfully. Existing sessions remain valid until their JWT expires.",
+        detail=("Password changed successfully. All existing sessions have been "
+                "signed out — log in again with the new password."),
     )
 
 

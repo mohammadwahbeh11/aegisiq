@@ -4,6 +4,87 @@ All notable changes to this project are documented here. Format is
 loosely based on [Keep a Changelog](https://keepachangelog.com); dates
 are the day the change landed on `main`.
 
+## [3.2.0] — Security audit + accreditation controls — 2026-09-14
+
+A code-level security audit of the whole backend and console, and the
+fixes that closed it. Full write-up, with severities and the reasoning
+behind each fix: **`docs/SECURITY_AUDIT_v32.md`**.
+
+### Fixed — security
+
+- **MFA bypass on the live event stream (High).** `/ws/stream` accepted
+  the pre-second-factor challenge token, so a stolen password alone
+  opened the live alert feed. The socket now applies the REST rules:
+  challenge tokens, disabled accounts, locked accounts and superseded
+  token versions are refused.
+- **No account lockout (High).** The only brute-force control was a
+  per-IP rate limit, which a distributed credential-stuffing run walks
+  straight past. `app/security/lockout.py` adds a per-account threshold
+  (5 failures → 15-minute self-clearing lock, NIST AC-7), audited, and
+  indistinguishable from a wrong password in the response.
+- **`X-Forwarded-For` trusted unconditionally (High).** A spoofed header
+  evaded the login rate limit and wrote a false `source_ip` into the
+  audit trail. `app/security/net.py` is now the single implementation and
+  honours the header only when `TRUST_PROXY_HEADERS=true`.
+- **Unbounded upload (Medium).** `/api/analysis/upload` read the whole
+  body into memory; it now streams against `MAX_UPLOAD_MB` and answers
+  413.
+- **Password change did not end live sessions (Medium).** Tokens carry a
+  `ver` claim tied to `users.token_version`; changing a password
+  increments it and revokes every token already issued (AC-12).
+- **`eval()` in the Sigma condition evaluator (Medium).** Rule content
+  can come from `sigma_rules/` or the SigmaHQ tarball. Replaced with a
+  recursive-descent boolean parser; `backend/app` now contains no
+  `eval(`/`exec(` at all, asserted by a test.
+- **No account-disable path (Medium).** `users.is_active` refuses login,
+  REST and socket without deleting audit history (AC-2).
+- **Exception text returned to the caller (Low)**, **`file://` accepted
+  as a SOAR webhook URL (Low)**, **database file world-readable and
+  `data/` missing on a fresh clone (Low)**.
+- **The SIEM database was committable (Medium).** `.gitignore` did not
+  cover `data/` or `*.db`, so the file holding password hashes, encrypted
+  MFA secrets and the audit trail was one `git add -A` from a public
+  repository. Now ignored, along with the build artefacts that were also
+  being tracked.
+
+### Fixed — console
+
+- **Light theme was unusable.** The "glass" layers hardcoded near-black
+  translucent surfaces with `!important`, so light mode rendered dark
+  panels under dark text. Surfaces now route through `--surface-*`
+  tokens with values for both themes; the active nav item and the page
+  ground follow `data-theme` instead of being pinned to dark.
+- **Toast rail covered the page.** A second `.toast-rail` rule added
+  `bottom` without clearing `top`, stretching the rail down the whole
+  viewport; four tall cards then hid the right-hand third of every page.
+  One positioning rule, capped at 50vh, three toasts, two-line clamp.
+- **Google Fonts removed.** Three CDN tags sat under a comment promising
+  none; the console's own CSP blocked them anyway, and the request
+  breaks the air-gap claim.
+- **Session end is explained.** Any unexpected 401 now signs the console
+  out with "your session ended" instead of filling the page with error
+  banners.
+
+### Added
+
+- `backend/tests/test_security_controls_v32.py` — 15 tests, one per
+  control, named after the control they prove (170 tests total).
+- `docs/SECURITY_AUDIT_v32.md` — findings, fixes, control mapping
+  (NIST 800-53 / STIG / ASVS L2 / CIS) and what the audit does *not*
+  claim.
+- Settings: `LOCKOUT_THRESHOLD`, `LOCKOUT_MINUTES`, `MAX_UPLOAD_MB`,
+  `TRUST_PROXY_HEADERS`, `JWT_ISSUER`, `JWT_AUDIENCE` — all documented
+  in `.env.example`.
+
+### Changed
+
+- `app/main.py` registered `rules_api.router` fifteen times, duplicating
+  every one of its operations in the OpenAPI document. One registration
+  each.
+- `index.css` imported the three design layers twice, and carried one
+  non-UTF-8 byte.
+
+
 ## [2.5.0] — AI Copilot + Threat Intel + Compliance Automation — 2026-09-12
 
 The commercialization release. Turns AegisIQ from "graduation project"

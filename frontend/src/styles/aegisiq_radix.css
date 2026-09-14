@@ -186,8 +186,8 @@ button.delete-btn:hover {
   padding: 16px 18px !important;
   border-radius: 12px !important;
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0)),
-    rgba(11,14,23,0.70) !important;
+    linear-gradient(180deg, var(--surface-sheen), transparent),
+    var(--surface-panel) !important;
 }
 .panel-header {
   padding-bottom: 10px !important;
