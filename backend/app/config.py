@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     # General — v2.0 branding
     PROJECT_NAME: str = "AegisIQ"                          # commercial name
     PROJECT_TAGLINE: str = "Intelligent Shield SIEM & SOAR"
-    PROJECT_VERSION: str = "3.2.1"
+    PROJECT_VERSION: str = "3.3.0"
     ENV: str = "development"
 
     # Database. Absolute by default (see REPO_ROOT above) rather than the
@@ -221,6 +221,23 @@ class Settings(BaseSettings):
     # accident) cannot authenticate here.
     JWT_ISSUER: str = "aegisiq"
     JWT_AUDIENCE: str = "aegisiq-console"
+
+    # --- v3.3 real containment (kill switch) ---
+    # SOAR_EXECUTE=true stops meaning "mark as intended" and starts
+    # meaning "send it": qualifying actions become signed orders for a
+    # registered response agent. It does nothing at all until an
+    # administrator registers an endpoint (POST /api/agents/endpoints),
+    # because an order is addressed to an agent and its shared secret.
+    # How long a queued order stays valid. Containment that lands an hour
+    # after the incident is an outage, not a response.
+    SOAR_ORDER_TTL_SECONDS: int = 300
+    # Whether the SIEM may block RFC1918 addresses. A lab attacks itself
+    # from 192.168.x.x, so the lab needs this on; an internet-facing SOC
+    # usually does not want an automated rule blocking its own subnets.
+    SOAR_BLOCK_PRIVATE_RANGES: bool = True
+    # Extra accounts the SIEM must never disable, comma-separated. root,
+    # administrator, admin and system are refused unconditionally.
+    SOAR_PROTECTED_ACCOUNTS: str = ""
 
     # --- Optional Wazuh integration ---
     # Left blank => the integration reports "not_configured" instead of

@@ -4,6 +4,75 @@ All notable changes to this project are documented here. Format is
 loosely based on [Keep a Changelog](https://keepachangelog.com); dates
 are the day the change landed on `main`.
 
+## [3.3.0] — Real containment + a working Intelligence page — 2026-09-14
+
+### Added — the kill switch actually fires
+
+`agent/kill_switch_agent_v2.py` had shipped since v2.7 and polled two
+endpoints — `/api/soar/agent/orders` and `/api/soar/agent/result` — that
+the backend never implemented. The agent could not receive an order, so
+the kill switch could not fire, while `docs/KILL_SWITCH.md` described the
+flow as if it did. That half is now built:
+
+- **`app/models/endpoint_agent.py`** — the endpoint registry and the
+  order ledger. The agent POLLS, so a protected host needs no inbound
+  port and the SIEM never connects into the estate.
+- **`app/soar/executor.py`** — guard rails, signing, queueing, result
+  handling and revocation. HMAC-SHA256 in both directions, a 60-second
+  skew window and nonce replay rejection, matching the agent exactly.
+- **`app/api/routes/response.py`** — enrol/list/disable/remove endpoints,
+  the two agent-facing routes, execute-on-demand, undo, and the order
+  ledger.
+- **Console — Automated response**: execution posture, the agent registry
+  with liveness, the order ledger, an *Execute* button on any recorded
+  decision and *Undo* on any applied one.
+- `SOAR_EXECUTE=true` now dispatches instead of only relabelling. It
+  stays inert until an administrator enrols an endpoint, and enrolment
+  requires `DATA_ENCRYPTION_KEY` — the shared secret is a remote-command
+  capability and is never stored or returned in the clear.
+
+**Guard rails** (`executor._refuse_reason`): no loopback, link-local,
+multicast or reserved address; not the console's own origin; never
+`root`/`administrator`/`admin`/`system` or anything in
+`SOAR_PROTECTED_ACCOUNTS`; no unparseable target. A refusal is recorded
+with its reason and shown in the console. Orders expire
+(`SOAR_ORDER_TTL_SECONDS`), the agent auto-expires its own blocks, and
+every applied order can be undone in one click.
+
+Verified end to end: brute-force burst → alert → SOAR decision → signed
+order → agent applies `iptables -I INPUT 1 -s … -j DROP` → console shows
+EXECUTED with the agent's own output → Undo queues `unblock_ip`.
+16 new tests in `backend/tests/test_kill_switch_v33.py`.
+
+### Fixed — the Intelligence page
+
+The page was written against an API that does not exist. All three
+panels read fields the backend never sends (`configured`, `verdict`,
+`pulses`, `version`, `controls_total`), so a working copilot showed as
+"not configured", reputation details rendered blank, and the compliance
+table was empty under a message blaming the router. Rewritten against
+the real contracts, and:
+
+- **`/api/copilot/explain/{id}` returned 500 on every call** —
+  `app/ai/copilot.py` read `alert.rule_type`, which lives on the related
+  rule row, in a module whose contract is "fail open, never 500". Fixed;
+  degraded mode now renders the alert's own evidence (rule, source,
+  MITRE technique, supporting-event count) instead of an empty panel.
+- Reputation feeds state WHY they are silent (no API key vs. blocked
+  network) rather than a flat "not configured".
+- A disabled primary button kept white text but lost its gradient
+  mid-request, rendering white-on-white for the seconds a slow lookup
+  takes.
+- The Arabic/English direction switch no longer flips the evidence grid,
+  only the model's own prose.
+
+### Changed
+
+- The test suite runs with data-at-rest encryption ON, so the encrypted
+  paths (MFA secrets, agent secrets) are the ones under test.
+- 197 backend tests (16 new).
+
+
 ## [3.2.1] — Session hardening, first-run MFA, shared limiter — 2026-09-14
 
 The second half of the v3.2 audit: the four weaknesses the first pass

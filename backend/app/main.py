@@ -20,6 +20,7 @@ from app.api.routes import (
     integrations,
     logs,
     mfa,            # v2.3 multi-factor auth
+    response,          # v3.3 real containment / kill switch
     retention,
     rules,
     simulation,
@@ -144,5 +145,6 @@ for _router in (
     copilot.router,          # v2.5 AI copilot
     enrichment.router,       # v2.5 threat-intel enrichment
     compliance.router,       # v2.5 compliance evidence
+    response.router,         # v3.3 endpoint agents + containment orders
 ):
     app.include_router(_router)

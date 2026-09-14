@@ -2,19 +2,28 @@
 app/soar/engine.py -- the automated-response (SOAR) layer.
 
 Scope, stated plainly because this is the part of a SIEM demo most often
-overclaimed: this module DECIDES and RECORDS a containment action for
-qualifying alerts. It does not execute anything. There is no code path
-in this project that runs `iptables`, disables an account, or touches a
-remote host, and `SOAR_EXECUTE=true` does not create one -- it only
-marks recorded actions as intended-for-execution (status PENDING instead
-of SIMULATED) so that a real executor could be added later without
-changing the schema or the console.
+overclaimed: this module DECIDES and RECORDS the containment an alert
+warrants. Whether that decision is carried out is a separate question
+with a separate answer:
 
-That is a deliberate scope decision, not an omission: a graduation
-project that ships a self-triggering remote-firewall changer on a lab
-network is a liability, and "the SOC console shows exactly what response
-would have been taken, for which alert, and why" demonstrates the same
-design.
+* ``SOAR_EXECUTE=false`` (the default) — decisions are recorded and
+  shown, and nothing runs anywhere. This is still the right setting for
+  a demo, and the console labels every action SIMULATED so no one
+  mistakes a record for an effect.
+* ``SOAR_EXECUTE=true`` (v3.3) — each qualifying action is handed to
+  ``app/soar/executor.py``, which addresses a signed order to a
+  REGISTERED response agent (``agent/kill_switch_agent_v2.py``) that an
+  administrator installed and enrolled. The agent polls, applies
+  ``iptables``/``netsh``, reports the result, and auto-expires its own
+  block. The SIEM never connects into the estate and holds no credential
+  to it.
+
+Even with execution on, an action is only issued when a guard rail
+allows it (see ``executor._refuse_reason``: no loopback, no reserved
+range, not the console's own origin, no protected account) and an agent
+actually covers the target. Everything else is recorded with the reason
+it was not executed — which is the honest half of an automated response
+layer, and the half that usually goes missing.
 
 Playbook selection (which action for which alert) is driven by the
 alert's own severity and rule type, so it stays consistent with the
@@ -126,6 +135,23 @@ def respond_to_alert(alert: Alert, db: Session) -> list[SoarAction]:
         return []
 
     db.commit()
+
+    # v3.3 — REAL containment. With SOAR_EXECUTE=true each qualifying
+    # action is handed to app/soar/executor.py, which turns it into a
+    # signed order for a registered response agent (and refuses, with a
+    # recorded reason, when a guard rail says no or no agent covers the
+    # target). With SOAR_EXECUTE=false nothing changes: decisions are
+    # recorded exactly as before.
+    if settings.SOAR_EXECUTE:
+        from app.soar import executor
+        for action in created:
+            try:
+                executor.execute_action(db, action, issued_by="soar")
+            except Exception:  # noqa: BLE001 - never break ingestion
+                import logging
+                logging.getLogger(__name__).exception(
+                    "containment dispatch failed for action %s", action.id)
+
     for action in created:
         db.refresh(action)
         payload = serialize_action(action)

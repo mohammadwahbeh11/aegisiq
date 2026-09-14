@@ -21,27 +21,66 @@ import { useAuth } from "../context/AuthContext";
 // ---------- narrow, page-local types (kept out of client.ts to keep the ----
 // drop-in patch minimal — move to client.ts if you want them shared) ------
 
+// v3.3 — these three interfaces described an API that does not exist.
+// Every field below is now the field the backend actually returns
+// (app/api/routes/copilot.py, enrichment.py, compliance.py): the page
+// rendered "not configured" for a working copilot, blank reputation
+// details, and an empty compliance table with a message blaming the
+// router, because it read `configured`, `verdict`, `pulses`, `version`
+// and `controls_total` — none of which are ever sent.
+
 interface CopilotStatus {
-  provider: string;
-  model: string;
-  configured: boolean;
-  degraded_reason?: string | null;
+  enabled: boolean;
+  provider: string | null;
+  model: string | null;
+  note?: string | null;
+  error?: string | null;
 }
 
+/** /api/copilot/explain/{id}: ai_status "ok" carries `analysis`;
+ *  "degraded" carries the alert itself plus the reason AI was skipped. */
 interface CopilotExplanation {
-  summary: string;
-  reasoning: string;
-  recommended_actions: string[];
-  confidence: "low" | "medium" | "high";
-  degraded?: boolean;
+  ai_status: "ok" | "degraded" | "error";
+  reason?: string | null;
+  alert_id?: number;
+  analysis?: {
+    summary?: string;
+    reasoning?: string;
+    recommended_actions?: string[];
+    confidence?: string;
+    [key: string]: unknown;
+  };
+  alert?: {
+    id: number;
+    rule_type: string | null;
+    rule_name?: string | null;
+    severity: string;
+    source_ip: string | null;
+    mitre_id: string | null;
+    kill_chain_phase: string | null;
+    description: string;
+    status: string;
+  };
+  related_events_count?: number;
+}
+
+interface FeedResult {
+  enabled: boolean;
+  reason?: string | null;
+  abuse_confidence?: number;
+  total_reports?: number;
+  country_code?: string | null;
+  pulse_count?: number;
+  tags?: string[];
+  [key: string]: unknown;
 }
 
 interface EnrichmentResult {
   ip: string;
   risk_score: number;                       // 0-100 composite
-  verdict: "clean" | "suspicious" | "malicious";
-  abuseipdb: { confidence: number; reports: number; country?: string } | null;
-  otx: { pulses: number; tags: string[] } | null;
+  risk_label: string;                       // clean | low | suspicious | …
+  abuseipdb: FeedResult | null;
+  otx: FeedResult | null;
   cached: boolean;
   cache_age_seconds?: number;
 }
@@ -49,10 +88,7 @@ interface EnrichmentResult {
 interface ComplianceFramework {
   id: "soc2" | "iso27001" | "gdpr";
   name: string;
-  version: string;
-  controls_total: number;
-  controls_evidenced: number;
-  updated_at: string;
+  standard: string;
 }
 
 // ---------- API wrappers -------------------------------------------------
@@ -101,8 +137,16 @@ async function openComplianceReport(id: ComplianceFramework["id"]): Promise<void
 
 // ---------- small view helpers ------------------------------------------
 
-function verdictClass(v: EnrichmentResult["verdict"]): string {
-  return `severity-badge severity-${v === "malicious" ? "critical" : v === "suspicious" ? "high" : "low"}`;
+function verdictClass(label: string | undefined): string {
+  // The service returns risk_label: clean | low | suspicious | high |
+  // malicious (app/enrichment/enrichment_service.py::_label). Map it onto
+  // the console's severity palette so a reputation verdict reads the same
+  // way an alert severity does.
+  const tier = label === "malicious" ? "critical"
+    : label === "high" ? "high"
+    : label === "suspicious" ? "medium"
+    : "low";
+  return `severity-badge severity-${tier}`;
 }
 
 function riskBarColor(score: number): string {
@@ -139,7 +183,8 @@ export default function Intelligence() {
   useEffect(() => {
     fetchCopilotStatus()
       .then(setCopilot)
-      .catch(() => setCopilot({ provider: "unavailable", model: "-", configured: false }));
+      .catch(() => setCopilot({ enabled: false, provider: null, model: null,
+                                error: "status probe failed" }));
 
     fetchComplianceFrameworks()
       .then((list) => setFrameworks(list))
@@ -200,7 +245,7 @@ export default function Intelligence() {
         <div>
           <h1>Intelligence</h1>
           <p className="muted">
-            AI-assisted triage, live IP reputation, and compliance evidence — v2.5
+            AI-assisted triage, live IP reputation, and compliance evidence
           </p>
         </div>
       </header>
@@ -210,12 +255,12 @@ export default function Intelligence() {
         <p className="muted" style={{ marginTop: "-0.25rem", marginBottom: "1rem" }}>
           {(() => {
             if (!copilot) return "Checking provider…";
-            const prov = (copilot.provider && copilot.provider !== "null") ? copilot.provider : "—";
-            const mdl  = (copilot.model    && copilot.model    !== "null") ? copilot.model    : "—";
-            if (!copilot.configured) {
-              return "No AI provider configured yet — set OPENAI_API_KEY, ANTHROPIC_API_KEY, or OLLAMA_URL on the server to enable AI-assisted triage. (fail-open: everything else still works)";
+            if (!copilot.enabled) {
+              return copilot.note
+                ?? copilot.error
+                ?? "No AI provider configured — set AI_PROVIDER (openai | anthropic | ollama) on the server. Triage still works without it, grouped by source address.";
             }
-            return `Provider: ${prov} • Model: ${mdl}`;
+            return `Provider: ${copilot.provider ?? "—"} • Model: ${copilot.model ?? "—"}`;
           })()}
         </p>
         <form onSubmit={handleExplain} className="inline-form" style={{ marginBottom: "1rem" }}>
@@ -240,25 +285,83 @@ export default function Intelligence() {
         {explaining && <Loading label="Asking the model…" />}
 
         {explanation && (
-          <div className="copilot-result" dir={lang === "ar" ? "rtl" : "ltr"}>
-            {explanation.degraded && (
-              <ErrorBanner>
-                Provider unavailable — showing a rules-based fallback (no AI content).
-              </ErrorBanner>
+          <div className="copilot-result">
+            {explanation.ai_status !== "ok" && (
+              <div className="info-banner">
+                {explanation.reason
+                  ?? "The AI provider was unavailable — showing the alert's own evidence."}
+              </div>
             )}
-            <h3>Summary</h3>
-            <p>{explanation.summary}</p>
-            <h3>Reasoning</h3>
-            <p style={{ whiteSpace: "pre-wrap" }}>{explanation.reasoning}</p>
-            <h3>Recommended actions</h3>
-            <ol>
-              {explanation.recommended_actions.map((a, i) => (
-                <li key={i}>{a}</li>
-              ))}
-            </ol>
-            <p className="muted">
-              Confidence: <strong>{explanation.confidence}</strong>
-            </p>
+
+            {explanation.analysis && (
+              // Only the model's own prose follows the requested language
+              // direction; the evidence grid below is field names and IPs
+              // and reads left-to-right in either language.
+              <div dir={lang === "ar" ? "rtl" : "ltr"}>
+                {explanation.analysis.summary && (
+                  <>
+                    <h3>Summary</h3>
+                    <p>{explanation.analysis.summary}</p>
+                  </>
+                )}
+                {explanation.analysis.reasoning && (
+                  <>
+                    <h3>Reasoning</h3>
+                    <p style={{ whiteSpace: "pre-wrap" }}>{explanation.analysis.reasoning}</p>
+                  </>
+                )}
+                {(explanation.analysis.recommended_actions ?? []).length > 0 && (
+                  <>
+                    <h3>Recommended actions</h3>
+                    <ol>
+                      {(explanation.analysis.recommended_actions ?? []).map((a, i) => (
+                        <li key={i}>{a}</li>
+                      ))}
+                    </ol>
+                  </>
+                )}
+                {explanation.analysis.confidence && (
+                  <p className="muted">
+                    Confidence: <strong>{String(explanation.analysis.confidence)}</strong>
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Degraded mode still has something worth showing: the alert
+                the analyst asked about, and how much evidence sits behind
+                it. An empty panel would read as a broken feature. */}
+            {!explanation.analysis && explanation.alert && (
+              <dl className="kv-grid" dir="ltr">
+                <div>
+                  <strong>Rule</strong>
+                  <p className="muted">
+                    {explanation.alert.rule_name ?? explanation.alert.rule_type ?? "—"}
+                    {" · "}{explanation.alert.severity}
+                  </p>
+                </div>
+                <div>
+                  <strong>Source</strong>
+                  <p className="muted mono">{explanation.alert.source_ip ?? "—"}</p>
+                </div>
+                <div>
+                  <strong>MITRE ATT&amp;CK</strong>
+                  <p className="muted">
+                    {explanation.alert.mitre_id ?? "—"}
+                    {explanation.alert.kill_chain_phase
+                      ? ` · ${explanation.alert.kill_chain_phase}` : ""}
+                  </p>
+                </div>
+                <div>
+                  <strong>Supporting events</strong>
+                  <p className="muted">{explanation.related_events_count ?? 0}</p>
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <strong>What fired</strong>
+                  <p className="muted">{explanation.alert.description}</p>
+                </div>
+              </dl>
+            )}
           </div>
         )}
       </Panel>
@@ -287,8 +390,8 @@ export default function Intelligence() {
         {enrichment && (
           <div className="enrichment-result">
             <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-              <span className={verdictClass(enrichment.verdict)}>
-                {enrichment.verdict.toUpperCase()}
+              <span className={verdictClass(enrichment.risk_label)}>
+                {(enrichment.risk_label ?? "unknown").toUpperCase()}
               </span>
               <code>{enrichment.ip}</code>
               {enrichment.cached && (
@@ -325,24 +428,31 @@ export default function Intelligence() {
             <div className="kv-grid" style={{ marginTop: "1rem" }}>
               <div>
                 <strong>AbuseIPDB</strong>
-                {enrichment.abuseipdb ? (
+                {enrichment.abuseipdb?.enabled ? (
                   <p className="muted">
-                    Confidence {enrichment.abuseipdb.confidence}% • {enrichment.abuseipdb.reports}{" "}
-                    reports{enrichment.abuseipdb.country ? ` • ${enrichment.abuseipdb.country}` : ""}
+                    Confidence {enrichment.abuseipdb.abuse_confidence ?? 0}% •{" "}
+                    {enrichment.abuseipdb.total_reports ?? 0} reports
+                    {enrichment.abuseipdb.country_code
+                      ? ` • ${enrichment.abuseipdb.country_code}` : ""}
                   </p>
                 ) : (
-                  <p className="muted">not configured</p>
+                  // Say WHY a feed is silent. "not configured" was wrong
+                  // half the time — a blocked network reads identically.
+                  <p className="muted">
+                    {enrichment.abuseipdb?.reason ?? "not configured"}
+                  </p>
                 )}
               </div>
               <div>
                 <strong>AlienVault OTX</strong>
-                {enrichment.otx ? (
+                {enrichment.otx?.enabled ? (
                   <p className="muted">
-                    {enrichment.otx.pulses} pulses
-                    {enrichment.otx.tags.length > 0 && ` • ${enrichment.otx.tags.slice(0, 4).join(", ")}`}
+                    {enrichment.otx.pulse_count ?? 0} pulses
+                    {(enrichment.otx.tags ?? []).length > 0
+                      && ` • ${(enrichment.otx.tags ?? []).slice(0, 4).join(", ")}`}
                   </p>
                 ) : (
-                  <p className="muted">not configured</p>
+                  <p className="muted">{enrichment.otx?.reason ?? "not configured"}</p>
                 )}
               </div>
             </div>
@@ -368,40 +478,28 @@ export default function Intelligence() {
             <thead>
               <tr>
                 <th>Framework</th>
-                <th>Version</th>
-                <th>Coverage</th>
-                <th>Updated</th>
+                <th>Standard</th>
                 <th />
               </tr>
             </thead>
             <tbody>
-              {frameworks.map((f) => {
-                const pct = f.controls_total
-                  ? Math.round((f.controls_evidenced / f.controls_total) * 100)
-                  : 0;
-                return (
-                  <tr key={f.id}>
-                    <td>
-                      <strong>{f.name}</strong>
-                    </td>
-                    <td className="muted">{f.version}</td>
-                    <td>
-                      {f.controls_evidenced}/{f.controls_total} ({pct}%)
-                    </td>
-                    <td className="muted">{f.updated_at}</td>
-                    <td>
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => void openComplianceReport(f.id)}
-                        disabled={!isAdmin}
-                        title={isAdmin ? "Open HTML report" : "Administrator only"}
-                      >
-                        Report
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+              {frameworks.map((f) => (
+                <tr key={f.id}>
+                  <td><strong>{f.name}</strong></td>
+                  <td className="muted">{f.standard}</td>
+                  <td>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => void openComplianceReport(f.id)}
+                      disabled={!isAdmin}
+                      title={isAdmin ? "Open the HTML evidence report"
+                                     : "Administrator only"}
+                    >
+                      Evidence report
+                    </button>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         )}

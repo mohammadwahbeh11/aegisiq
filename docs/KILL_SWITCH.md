@@ -5,9 +5,55 @@
 > second** of detection — instead of waiting minutes for a human analyst
 > to SSH in and type `iptables` rules by hand.
 
-**File:** `agent/kill_switch_agent.py`
+**Agent:** `agent/kill_switch_agent_v2.py` (v2.7 — Linux/Windows/macOS)
 **Installer:** `agent/install.sh`
-**Backend caller:** `backend/app/soar/webhook.py` (already exists)
+**Backend (v3.3):**
+`backend/app/soar/executor.py` — decides, signs and queues orders
+`backend/app/api/routes/response.py` — the endpoints the agent polls
+`backend/app/models/endpoint_agent.py` — the registry and the order ledger
+
+> **v3.3 note.** Until v3.3 this document described a backend that did not
+> exist: the agent polled `/api/soar/agent/orders` and posted to
+> `/api/soar/agent/result`, and neither route was implemented, so the kill
+> switch could never fire. Both exist now, the console drives them, and
+> the chain is covered end to end by
+> `backend/tests/test_kill_switch_v33.py`.
+
+---
+
+## How it actually works now
+
+The agent **polls**; the SIEM never connects into the estate. A protected
+host therefore needs no inbound port, no public address and no firewall
+exception, and the SIEM holds no credential to the estate — only a shared
+HMAC secret per endpoint, encrypted at rest.
+
+```
+alert (HIGH/CRITICAL)
+  → app/soar/engine.py           decides the containment (playbook)
+  → app/soar/executor.py         guard rails, then a signed order
+  → GET  /api/soar/agent/orders  the agent collects it (response signed)
+  → iptables / netsh / pf        the agent applies it, and auto-expires it
+  → POST /api/soar/agent/result  the agent reports back (request signed)
+  → console                      status EXECUTED, with the agent's output
+```
+
+**Enrol an endpoint** in the console: *Automated response → Enrol
+endpoint*. The shared secret is displayed once and stored encrypted;
+there is no API that reads it back. Then run the agent on that host with
+`AEGIS_ENDPOINT_ID`, `AEGIS_SHARED_SECRET` and `AEGIS_SIEM_URL`.
+
+**Guard rails that always apply** (`executor._refuse_reason`): never a
+loopback, link-local, multicast or reserved address; never the console's
+own origin; never `root`/`administrator`/`admin`/`system` or anything in
+`SOAR_PROTECTED_ACCOUNTS`; never a target that will not parse. A refused
+action is recorded with its reason and shown in the console — the SIEM
+says what it would not do, and why.
+
+**Everything is reversible and time-boxed.** An order not collected
+within `SOAR_ORDER_TTL_SECONDS` expires unapplied; the agent auto-expires
+its own blocks after `MAX_BLOCK_MINUTES`; and *Undo* in the console
+queues the inverse action (`unblock_ip` / `enable_user`).
 
 ---
 

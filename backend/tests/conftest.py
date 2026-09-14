@@ -10,6 +10,10 @@ os.environ["SECRET_KEY"] = "test-secret-key"
 os.environ["DEFAULT_ADMIN_USERNAME"] = "admin"
 os.environ["DEFAULT_ADMIN_PASSWORD"] = "TestAdmin123!"
 os.environ["CORS_ORIGINS"] = "http://localhost:5173"
+# v3.3 — the suite runs WITH data-at-rest encryption on, so the encrypted
+# paths (MFA secrets, response-agent shared secrets) are the ones under
+# test rather than a plaintext fallback nobody ships.
+os.environ.setdefault("DATA_ENCRYPTION_KEY", "test-" + "0" * 59)
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

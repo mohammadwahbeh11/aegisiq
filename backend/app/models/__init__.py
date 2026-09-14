@@ -12,3 +12,5 @@ from app.models.incident import Incident  # noqa: F401
 from app.models.alert import Alert  # noqa: F401
 from app.models.soar import SoarAction  # noqa: F401
 from app.models.mfa import UserMFA  # noqa: F401
+from app.models.analysis import AnalysisReport  # noqa: F401
+from app.models.endpoint_agent import EndpointAgent, SoarOrder  # noqa: F401

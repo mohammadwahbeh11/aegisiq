@@ -933,6 +933,82 @@ export async function fetchSoarActions(limit = 100): Promise<SoarActionsResponse
   return response.data;
 }
 
+// ─── v3.3 real containment (kill switch) ─────────────────────────────
+export interface ResponseAgent {
+  id: number;
+  endpoint_id: string;
+  label: string | null;
+  hostname: string | null;
+  platform: string | null;
+  enabled: boolean;
+  note: string | null;
+  last_seen_at: string | null;
+  last_seen_seconds_ago: number | null;
+  status: "online" | "stale" | "offline" | "never_seen";
+  last_seen_ip: string | null;
+}
+
+export interface ResponseAgentsResponse {
+  items: ResponseAgent[];
+  execution_enabled: boolean;
+  note: string;
+}
+
+export interface ContainmentOrder {
+  order_uid: string;
+  endpoint_id: string;
+  action: string;
+  target: string;
+  status: "queued" | "delivered" | "succeeded" | "failed" | "expired" | "cancelled";
+  alert_id: number | null;
+  soar_action_id: number | null;
+  issued_by: string | null;
+  created_at: string | null;
+  delivered_at: string | null;
+  completed_at: string | null;
+  output: string | null;
+  revocable: boolean;
+}
+
+export async function fetchResponseAgents(): Promise<ResponseAgentsResponse> {
+  const response = await apiClient.get<ResponseAgentsResponse>("/api/agents/endpoints");
+  return response.data;
+}
+
+export async function enrolResponseAgent(body: {
+  endpoint_id: string; label?: string; hostname?: string; platform?: string;
+}): Promise<{ endpoint_id: string; shared_secret: string; install_hint: string; note: string }> {
+  const response = await apiClient.post("/api/agents/endpoints", body);
+  return response.data;
+}
+
+export async function setResponseAgentEnabled(endpointId: string, enabled: boolean) {
+  const response = await apiClient.patch(`/api/agents/endpoints/${encodeURIComponent(endpointId)}`,
+    { enabled });
+  return response.data;
+}
+
+export async function deleteResponseAgent(endpointId: string): Promise<void> {
+  await apiClient.delete(`/api/agents/endpoints/${encodeURIComponent(endpointId)}`);
+}
+
+export async function fetchContainmentOrders(limit = 50): Promise<{ total: number; items: ContainmentOrder[] }> {
+  const response = await apiClient.get("/api/soar/orders", { params: { limit } });
+  return response.data;
+}
+
+/** Carry out a recorded containment decision now (administrator only). */
+export async function executeSoarAction(actionId: number): Promise<{ executed: boolean; order_uid: string | null; endpoint_id?: string }> {
+  const response = await apiClient.post(`/api/soar/actions/${actionId}/execute`);
+  return response.data;
+}
+
+/** Undo an applied order by queueing its inverse. */
+export async function revokeContainmentOrder(orderUid: string): Promise<ContainmentOrder> {
+  const response = await apiClient.post(`/api/soar/orders/${encodeURIComponent(orderUid)}/revoke`);
+  return response.data;
+}
+
 export async function fetchEndpoints(): Promise<EndpointsOverview> {
   const response = await apiClient.get<EndpointsOverview>("/api/agents/overview");
   return response.data;

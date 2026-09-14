@@ -167,7 +167,7 @@ class CopilotService:
             # still gets a useful clustering.
             groups: dict[str, list[int]] = {}
             for a in alerts:
-                key = a.source_ip or f"no-ip-{a.rule_type}"
+                key = a.source_ip or f"no-ip-{_rule_type_of(a) or a.rule_id}"
                 groups.setdefault(key, []).append(a.id)
             stories = [
                 {
@@ -211,10 +211,21 @@ class CopilotService:
 
 
 # ─── dict shape helpers (avoid pulling in Pydantic here) ────────────
+def _rule_type_of(a: Alert) -> str | None:
+    """The rule type lives on the related DetectionRule row, not on the
+    alert. Reading ``a.rule_type`` raised AttributeError, so every call
+    to /api/copilot/explain answered 500 — in a module whose contract is
+    "fail open, never 500". Fail-open only works if the code reaches the
+    fallback."""
+    rule = getattr(a, "rule", None)
+    return getattr(rule, "rule_type", None) if rule is not None else None
+
+
 def _alert_as_dict(a: Alert) -> dict[str, Any]:
     return {
         "id": a.id,
-        "rule_type": a.rule_type,
+        "rule_type": _rule_type_of(a),
+        "rule_name": getattr(getattr(a, "rule", None), "name", None),
         "severity": a.severity.value if hasattr(a.severity, "value") else str(a.severity),
         "source_ip": a.source_ip,
         "mitre_id": a.mitre_id,
